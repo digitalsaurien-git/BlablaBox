@@ -1,0 +1,5 @@
+-- CreateEnum
+CREATE TYPE "DeliveryType" AS ENUM ('IMMERSIVE_STORY', 'COURSE_SUMMARY', 'MEMORY_AUDIO_CARD', 'REVIEW_QA');
+
+-- AlterTable
+ALTER TABLE "Project" ADD COLUMN     "deliveryType" "DeliveryType" NOT NULL DEFAULT 'COURSE_SUMMARY';

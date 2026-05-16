@@ -1,0 +1,54 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ProjectStatus {
+  DRAFT
+  SCRIPT_GENERATED
+  SCRIPT_FAILED
+}
+
+enum AudioStatus {
+  NOT_STARTED
+  MOCK_READY
+  PENDING
+  GENERATED
+  FAILED
+}
+
+enum DeliveryType {
+  IMMERSIVE_STORY
+  COURSE_SUMMARY
+  MEMORY_AUDIO_CARD
+  REVIEW_QA
+}
+
+model Project {
+  id                    String        @id @default(cuid())
+  userId                String?
+  title                 String
+  sourceType            String        @default("text")
+  sourceContent         String        @db.Text
+  targetDurationMinutes Int
+  audience              String
+  tone                  String
+  level                 String
+  learningObjective     String        @db.Text
+  deliveryType          DeliveryType  @default(COURSE_SUMMARY)
+  script                String?       @db.Text
+  scriptStatus          ProjectStatus @default(DRAFT)
+  audioStatus           AudioStatus   @default(NOT_STARTED)
+  audioUrl              String?
+  audioFormat           String?       @default("mp3")
+  errorMessage          String?       @db.Text
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([createdAt])
+}
