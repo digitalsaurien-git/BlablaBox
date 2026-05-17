@@ -1,165 +1,177 @@
-# Preparation deploiement Coolify - BlablaBox
+# Déploiement Coolify - BlablaBox
 
-## 1. Diagnostic deploiement
+## État actuel
 
-Etat constate le 2026-05-16 :
+BlablaBox est maintenant une application Next.js App Router avec TypeScript, Tailwind CSS, Prisma et PostgreSQL.
 
-- Le depot contient uniquement `AGENTS.md`.
-- Aucun `package.json`, dossier `app/`, configuration Next.js, schema Prisma, Dockerfile ou docker-compose n'est present.
-- Le build Next.js, `prisma generate`, les migrations et la connexion PostgreSQL ne sont donc pas testables a ce stade.
-- Le projet n'est pas deployable sur Coolify en l'etat.
+Repository GitHub : `digitalsaurien-git/BlablaBox`
 
-Objectif de preparation :
+Branche cible : `main`
 
-- cadrer les variables d'environnement attendues ;
-- definir les fichiers a ajouter quand l'application Next.js existe ;
-- lister les controles avant de connecter Coolify au depot ;
-- eviter toute modification du VPS, du reverse proxy, du domaine, du HTTPS ou d'une base PostgreSQL existante.
+Le premier déploiement futur doit rester simple et contrôlé : utiliser le buildpack Coolify / Nixpacks Node. Aucun Dockerfile et aucun docker-compose ne sont utilisés pour l'instant.
 
-## 2. Fichiers a creer ou modifier
+Ce document prépare le déploiement, mais ne déclenche aucun déploiement.
 
-Fichiers ajoutes maintenant :
+## Décision recommandée
 
-- `.env.example` : modele de variables sans secret reel.
-- `docs/deployment-coolify.md` : diagnostic, etapes et checklist de deploiement.
+Mode recommandé pour le premier déploiement : Coolify buildpack / Nixpacks Node.
 
-Fichiers a creer quand l'application existe :
+Raisons :
 
-- `package.json` avec scripts `dev`, `build`, `start`, `lint` si utilise, et scripts Prisma.
-- `next.config.ts` ou `next.config.js` si configuration specifique.
-- `prisma/schema.prisma`.
-- `prisma/migrations/` avec migrations versionnees.
-- `Dockerfile` uniquement si le mode Docker est retenu dans Coolify.
-- `.dockerignore` si un `Dockerfile` est ajoute.
-- endpoint de healthcheck, par exemple `app/api/health/route.ts`.
+- le projet est un Next.js standard ;
+- aucun besoin Docker spécifique n'existe actuellement ;
+- la commande de build peut rester explicite ;
+- le Dockerfile sera traité dans un lot dédié si le besoin apparaît.
 
-Dockerfile recommande plus tard, apres presence d'un vrai projet Next.js :
+## Paramètres Coolify recommandés
 
-```Dockerfile
-FROM node:22-alpine AS deps
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
+Port interne de l'application : `3000`
 
-FROM node:22-alpine AS builder
-WORKDIR /app
-ENV NEXT_TELEMETRY_DISABLED=1
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-RUN npx prisma generate
-RUN npm run build
-
-FROM node:22-alpine AS runner
-WORKDIR /app
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3000
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-EXPOSE 3000
-CMD ["node", "server.js"]
-```
-
-Ce Dockerfile suppose `output: "standalone"` dans la configuration Next.js.
-
-## 3. Variables d'environnement necessaires
-
-Variables minimales :
-
-- `NODE_ENV=production`
-- `NEXT_PUBLIC_APP_URL`
-- `PORT=3000`
-- `DATABASE_URL`
-- `AUTH_SECRET`
-
-Variables providers :
-
-- `LLM_PROVIDER`
-- `LLM_API_KEY`
-- `TTS_PROVIDER`
-- `TTS_API_KEY`
-- `OCR_PROVIDER`
-- `OCR_API_KEY`
-- `SPEECH_TO_TEXT_PROVIDER`
-- `SPEECH_TO_TEXT_API_KEY`
-
-Variables stockage futur :
-
-- `STORAGE_PROVIDER`
-- `STORAGE_BUCKET`
-- `STORAGE_ENDPOINT`
-- `STORAGE_ACCESS_KEY`
-- `STORAGE_SECRET_KEY`
-
-Regles de securite :
-
-- Ne jamais commiter de `.env` reel.
-- Definir les secrets dans Coolify, pas dans le depot.
-- Generer `AUTH_SECRET` avec une valeur aleatoire forte.
-- Donner a l'utilisateur PostgreSQL uniquement les droits necessaires a la base BlablaBox.
-- Ne pas reutiliser les secrets de developpement en production.
-
-## 4. Etapes Coolify proposees
-
-1. Verifier que le projet Next.js build localement.
-2. Verifier que `npx prisma generate` passe.
-3. Verifier que les migrations Prisma sont presentes et appliquees sur une base de test.
-4. Creer ou selectionner l'application Coolify depuis le depot Git.
-5. Choisir le mode de build :
-   - Nixpacks/Node si le projet reste standard Next.js ;
-   - Dockerfile si un build reproductible et controle est souhaite.
-6. Definir le port interne `3000`.
-7. Renseigner les variables d'environnement dans Coolify.
-8. Connecter PostgreSQL sans remplacer une base existante.
-9. Configurer une commande de migration explicite si Coolify le permet, par exemple `npx prisma migrate deploy`.
-10. Configurer un healthcheck HTTP, par exemple `/api/health`.
-11. Lancer un premier deploiement de validation.
-
-## 5. Risques
-
-- Aucun code applicatif n'existe encore dans ce depot.
-- Un `Dockerfile` ajoute trop tot peut donner une fausse impression de deployabilite.
-- `prisma migrate dev` ne doit pas etre utilise en production ; preferer `prisma migrate deploy`.
-- Une `DATABASE_URL` incorrecte peut pointer vers la mauvaise base PostgreSQL.
-- Les providers LLM/TTS/OCR/STT doivent gerer les erreurs et quotas pour eviter des echecs en production.
-- Le stockage local n'est pas adapte aux fichiers persistants si les conteneurs sont recrees ; prevoir un volume ou un stockage objet.
-- Les logs ne doivent jamais contenir de prompt sensible, cle API, URL de base avec mot de passe, ou contenu utilisateur confidentiel.
-
-## 6. Tests avant deploiement
-
-Commandes a executer quand le projet Next.js existe :
+Commande de build recommandée :
 
 ```bash
-npm install
-npx prisma generate
-npm run build
-npx prisma migrate deploy
+npm ci && npx prisma generate && npm run build
+```
+
+Commande de start recommandée :
+
+```bash
 npm run start
 ```
 
-Verifications manuelles :
+Commande de migration production :
 
-- `GET /api/health` retourne `200`.
-- L'application demarre sur le port `3000`.
-- La connexion PostgreSQL fonctionne.
-- La creation d'un projet audio fonctionne.
-- La generation de script gere les erreurs provider.
-- Les logs restent lisibles sans exposer les secrets.
-- Les variables manquantes provoquent une erreur explicite au demarrage ou dans le flux concerne.
+```bash
+npm run db:migrate:deploy
+```
 
-## 7. Checklist operateur
+Ne jamais utiliser `prisma migrate dev` en production.
 
-- [ ] Le depot contient une application Next.js fonctionnelle.
-- [ ] `npm run build` passe localement.
-- [ ] `npx prisma generate` passe localement.
-- [ ] Les migrations Prisma sont versionnees.
-- [ ] `prisma migrate deploy` a ete teste sur une base de test.
-- [ ] `.env.example` est a jour.
-- [ ] Aucun secret reel n'est commite.
-- [ ] `DATABASE_URL` Coolify pointe vers la bonne base.
-- [ ] Le port interne Coolify est `3000`.
-- [ ] Le healthcheck est disponible.
-- [ ] Le stockage futur des fichiers est decide.
-- [ ] Les logs ne fuitent pas de donnees sensibles.
-- [ ] Le deploiement est valide sur un environnement de test avant production.
+## Variables d'environnement
+
+Renseigner les variables réelles uniquement dans Coolify. Ne jamais commiter de `.env` réel.
+
+Variables minimales :
+
+```env
+NODE_ENV=production
+NEXT_PUBLIC_APP_URL=https://example.com
+PORT=3000
+DATABASE_URL=postgresql://user:password@host:5432/blablabox
+LLM_PROVIDER=mock
+LLM_API_KEY=
+LLM_MODEL=gpt-5-mini
+```
+
+Pour le premier déploiement, garder obligatoirement :
+
+```env
+LLM_PROVIDER=mock
+```
+
+Ne pas activer OpenAI ou un provider payant pendant le premier déploiement.
+
+Les secrets doivent rester dans Coolify :
+
+- `DATABASE_URL` réelle ;
+- future clé `LLM_API_KEY` si un lot validé active un provider réel ;
+- futurs secrets d'authentification ou stockage.
+
+## PostgreSQL
+
+Préparer une base PostgreSQL dédiée à BlablaBox.
+
+Recommandations :
+
+- utiliser une base PostgreSQL gérée par Coolify ou une base dédiée sur le VPS ;
+- utiliser un utilisateur PostgreSQL dédié ;
+- limiter les droits à la base BlablaBox ;
+- vérifier que `DATABASE_URL` pointe vers la bonne base avant toute migration ;
+- tester les migrations sur une base de test avant production si possible.
+
+## Prisma
+
+Les migrations Prisma sont versionnées dans `prisma/migrations`.
+
+En production, utiliser :
+
+```bash
+npm run db:migrate:deploy
+```
+
+Ne pas utiliser :
+
+```bash
+npx prisma migrate dev
+```
+
+`migrate dev` est réservé au développement local.
+
+## Healthcheck
+
+Après déploiement, vérifier :
+
+```text
+/api/health
+```
+
+Le endpoint doit répondre avec un statut HTTP `200`.
+
+## Hors périmètre de ce lot
+
+Ne pas ajouter dans ce lot :
+
+- Dockerfile ;
+- docker-compose ;
+- modification `next.config.ts` ;
+- déploiement ;
+- connexion VPS ;
+- configuration Coolify réelle ;
+- provider LLM réel activé ;
+- TTS ;
+- MP3 ;
+- OCR ;
+- dictée ;
+- upload PDF/DOCX.
+
+## Checklist opérateur
+
+### Avant déploiement
+
+- [ ] Vérifier que `npm run build` passe en local.
+- [ ] Vérifier que les migrations Prisma sont versionnées.
+- [ ] Préparer une base PostgreSQL dédiée.
+- [ ] Préparer `DATABASE_URL`.
+- [ ] Garder `LLM_PROVIDER=mock`.
+- [ ] Vérifier que `.env` n'est pas committé.
+- [ ] Vérifier que la branche GitHub `main` est à jour.
+
+### Dans Coolify
+
+- [ ] Créer une application depuis GitHub.
+- [ ] Choisir le repository `digitalsaurien-git/BlablaBox`.
+- [ ] Choisir la branche `main`.
+- [ ] Utiliser Nixpacks / Node.
+- [ ] Renseigner les variables d'environnement.
+- [ ] Configurer le port `3000`.
+- [ ] Lancer le build.
+- [ ] Lancer la migration Prisma avec `npm run db:migrate:deploy` si nécessaire.
+- [ ] Vérifier `/api/health`.
+
+### Après déploiement
+
+- [ ] Ouvrir l'application.
+- [ ] Créer un projet test.
+- [ ] Générer un script avec le mock.
+- [ ] Vérifier la bibliothèque.
+- [ ] Supprimer le projet test.
+- [ ] Vérifier les logs Coolify.
+
+## Risques
+
+- Une mauvaise `DATABASE_URL` peut appliquer les migrations sur la mauvaise base.
+- Oublier `npx prisma generate` peut casser le build ou le runtime Prisma.
+- Lancer `prisma migrate dev` en production peut modifier l'historique de migration de façon inadaptée.
+- Activer `LLM_PROVIDER=openai` sans clé ou sans validation produit peut provoquer des erreurs ou des coûts.
+- Sans Auth.js, la bibliothèque reste globale temporairement.
+- Aucun stockage audio réel n'existe encore.

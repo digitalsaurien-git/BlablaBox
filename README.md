@@ -1,6 +1,6 @@
 # BlablaBox
 
-BlablaBox est un MVP Next.js qui transforme un texte ou un sujet libre en script audio pédagogique. Le lot actuel utilise `MockLLMProvider` par défaut : aucun appel IA externe, aucun TTS réel et aucun fichier MP3 ne sont générés.
+BlablaBox est un MVP Next.js qui transforme un texte ou un sujet libre en script audio pÃ©dagogique. Le lot actuel utilise `MockLLMProvider` par dÃ©faut : aucun appel IA externe, aucun TTS rÃ©el et aucun fichier MP3 ne sont gÃ©nÃ©rÃ©s.
 
 ## Stack
 
@@ -10,21 +10,21 @@ BlablaBox est un MVP Next.js qui transforme un texte ou un sujet libre en script
 - Prisma
 - PostgreSQL
 
-## Fonctionnalités du lot actuel
+## FonctionnalitÃ©s du lot actuel
 
-- Création d'un projet audio.
-- Paramètres pédagogiques : durée, public cible, ton, niveau, objectif.
-- Type de restitution : histoire immersive, résumé de cours, fiche audio de mémorisation, questions-réponses de révision.
-- Génération d'un script narratif simulé mais réaliste.
-- Bibliothèque globale temporaire.
-- Page détail projet avec source, paramètres, statuts, objectif et script.
-- Régénération du script avec confirmation.
+- CrÃ©ation d'un projet audio.
+- ParamÃ¨tres pÃ©dagogiques : durÃ©e, public cible, ton, niveau, objectif.
+- Type de restitution : histoire immersive, rÃ©sumÃ© de cours, fiche audio de mÃ©morisation, questions-rÃ©ponses de rÃ©vision.
+- GÃ©nÃ©ration d'un script narratif simulÃ© mais rÃ©aliste.
+- BibliothÃ¨que globale temporaire.
+- Page dÃ©tail projet avec source, paramÃ¨tres, statuts, objectif et script.
+- RÃ©gÃ©nÃ©ration du script avec confirmation.
 - Suppression simple avec confirmation.
-- Architecture prête pour un futur provider LLM réel, non activé par défaut.
+- Architecture prÃªte pour un futur provider LLM rÃ©el, non activÃ© par dÃ©faut.
 
-## Cadre de développement
+## Cadre de dÃ©veloppement
 
-Les décisions produit, règles de sécurité et garde-fous des prochains lots sont dans `AGENTS.md`. Avant tout lot sensible, notamment Prisma, API réelle, TTS/MP3, Auth.js, Docker/Coolify, déploiement ou action GitHub sensible, relire `AGENTS.md`, présenter un plan et attendre validation humaine.
+Les dÃ©cisions produit, rÃ¨gles de sÃ©curitÃ© et garde-fous des prochains lots sont dans `AGENTS.md`. Avant tout lot sensible, notamment Prisma, API rÃ©elle, TTS/MP3, Auth.js, Docker/Coolify, dÃ©ploiement ou action GitHub sensible, relire `AGENTS.md`, prÃ©senter un plan et attendre validation humaine.
 
 ## Installation
 
@@ -41,9 +41,9 @@ npm run db:generate
 npx prisma migrate dev
 ```
 
-`migrate dev` crée les tables en développement. Ne pas utiliser cette commande en production.
+`migrate dev` crÃ©e les tables en dÃ©veloppement. Ne pas utiliser cette commande en production.
 
-## Développement
+## DÃ©veloppement
 
 ```bash
 npm run dev
@@ -51,7 +51,7 @@ npm run dev
 
 L'application sera disponible sur `http://localhost:3000`.
 
-## Vérification
+## VÃ©rification
 
 ```bash
 npm run build
@@ -59,7 +59,7 @@ npm run build
 
 ## Providers LLM
 
-Par défaut, BlablaBox utilise le provider local `MockLLMProvider` :
+Par dÃ©faut, BlablaBox utilise le provider local `MockLLMProvider` :
 
 ```env
 LLM_PROVIDER=mock
@@ -69,7 +69,7 @@ LLM_MODEL=gpt-5-mini
 
 Ce mode ne fait aucun appel externe et ne consomme aucune API payante.
 
-Un provider OpenAI est préparé côté serveur pour un lot futur. Pour l'activer plus tard, il faudra définir explicitement :
+Un provider OpenAI est prÃ©parÃ© cÃ´tÃ© serveur pour un lot futur. Pour l'activer plus tard, il faudra dÃ©finir explicitement :
 
 ```env
 LLM_PROVIDER=openai
@@ -77,8 +77,12 @@ LLM_API_KEY=sk-...
 LLM_MODEL=gpt-5-mini
 ```
 
-La clé ne doit jamais être préfixée par `NEXT_PUBLIC_` et ne doit jamais être exposée côté client. Si `LLM_PROVIDER=openai` est demandé sans `LLM_API_KEY`, l'application renvoie une erreur claire et la génération échoue proprement.
+La clÃ© ne doit jamais Ãªtre prÃ©fixÃ©e par `NEXT_PUBLIC_` et ne doit jamais Ãªtre exposÃ©e cÃ´tÃ© client. Si `LLM_PROVIDER=openai` est demandÃ© sans `LLM_API_KEY`, l'application renvoie une erreur claire et la gÃ©nÃ©ration Ã©choue proprement.
 
+
+## Déploiement futur
+
+La préparation d'un futur déploiement VPS Hostinger via Coolify est documentée dans `docs/deployment-coolify.md`. Aucun déploiement n'est effectué par défaut.
 ## Notes produit
 
-Le modèle `Project` contient déjà un `userId` nullable pour préparer une future authentification sans bloquer le MVP technique actuel.
+Le modÃ¨le `Project` contient dÃ©jÃ  un `userId` nullable pour prÃ©parer une future authentification sans bloquer le MVP technique actuel.
