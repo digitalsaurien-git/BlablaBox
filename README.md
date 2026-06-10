@@ -80,9 +80,12 @@ LLM_MODEL=gpt-5-mini
 La clÃ© ne doit jamais Ãªtre prÃ©fixÃ©e par `NEXT_PUBLIC_` et ne doit jamais Ãªtre exposÃ©e cÃ´tÃ© client. Si `LLM_PROVIDER=openai` est demandÃ© sans `LLM_API_KEY`, l'application renvoie une erreur claire et la gÃ©nÃ©ration Ã©choue proprement.
 
 
-## Déploiement futur
+## Déploiement Coolify
 
-La préparation d'un futur déploiement VPS Hostinger via Coolify est documentée dans `docs/deployment-coolify.md`. Aucun déploiement n'est effectué par défaut.
+Le premier déploiement Coolify est validé avec Nixpacks, `LLM_PROVIDER=mock`, le port `3000`, la build command `npx prisma generate && npm run build` et la start command `npm run start`.
+
+Les notes d'exploitation sont documentées dans `docs/deployment-coolify.md`.
+
 ## Notes produit
 
 Le modÃ¨le `Project` contient dÃ©jÃ  un `userId` nullable pour prÃ©parer une future authentification sans bloquer le MVP technique actuel.

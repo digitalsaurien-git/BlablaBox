@@ -1,39 +1,39 @@
-# Déploiement Coolify - BlablaBox
+# Deploiement Coolify - BlablaBox
 
-## État actuel
+## Etat valide
 
-BlablaBox est maintenant une application Next.js App Router avec TypeScript, Tailwind CSS, Prisma et PostgreSQL.
+Le premier deploiement Coolify de BlablaBox est fonctionnel.
+
+Etat verifie :
+
+- build Coolify OK ;
+- application accessible ;
+- `/api/health` OK ;
+- `/projects` OK ;
+- `/projects/new` OK ;
+- base PostgreSQL connectee ;
+- migrations Prisma appliquees ;
+- parcours principal fonctionnel.
 
 Repository GitHub : `digitalsaurien-git/BlablaBox`
 
 Branche cible : `main`
 
-Le premier déploiement futur doit rester simple et contrôlé : utiliser le buildpack Coolify / Nixpacks Node. Aucun Dockerfile et aucun docker-compose ne sont utilisés pour l'instant.
+Mode utilise : Coolify buildpack / Nixpacks Node.
 
-Ce document prépare le déploiement, mais ne déclenche aucun déploiement.
+Aucun Dockerfile et aucun docker-compose ne sont utilises pour l'instant.
 
-## Décision recommandée
-
-Mode recommandé pour le premier déploiement : Coolify buildpack / Nixpacks Node.
-
-Raisons :
-
-- le projet est un Next.js standard ;
-- aucun besoin Docker spécifique n'existe actuellement ;
-- la commande de build peut rester explicite ;
-- le Dockerfile sera traité dans un lot dédié si le besoin apparaît.
-
-## Paramètres Coolify recommandés
+## Parametres Coolify valides
 
 Port interne de l'application : `3000`
 
-Commande de build recommandée :
+Build command :
 
 ```bash
-npm ci && npx prisma generate && npm run build
+npx prisma generate && npm run build
 ```
 
-Commande de start recommandée :
+Start command :
 
 ```bash
 npm run start
@@ -47,9 +47,39 @@ npm run db:migrate:deploy
 
 Ne jamais utiliser `prisma migrate dev` en production.
 
+Note importante : ne pas ajouter `npm ci` dans la build command Coolify si Nixpacks execute deja l'installation des dependances. Dans ce cas, la build command doit uniquement generer Prisma puis lancer le build Next.js.
+
+## Erreur connue EBUSY node_modules/.cache
+
+Erreur rencontree pendant le premier deploiement :
+
+```text
+EBUSY: resource busy or locked, rmdir '/app/node_modules/.cache'
+```
+
+Cause : Nixpacks lancait deja `npm ci`, puis la build command personnalisee relancait `npm ci` une seconde fois.
+
+Correction appliquee dans Coolify :
+
+```bash
+npx prisma generate && npm run build
+```
+
+La start command reste :
+
+```bash
+npm run start
+```
+
+Le port reste :
+
+```text
+3000
+```
+
 ## Variables d'environnement
 
-Renseigner les variables réelles uniquement dans Coolify. Ne jamais commiter de `.env` réel.
+Renseigner les variables reelles uniquement dans Coolify. Ne jamais commiter de `.env` reel.
 
 Variables minimales :
 
@@ -63,35 +93,35 @@ LLM_API_KEY=
 LLM_MODEL=gpt-5-mini
 ```
 
-Pour le premier déploiement, garder obligatoirement :
+Pour le premier deploiement valide, `LLM_PROVIDER` est reste sur :
 
 ```env
 LLM_PROVIDER=mock
 ```
 
-Ne pas activer OpenAI ou un provider payant pendant le premier déploiement.
+Ne pas activer OpenAI ou un provider payant sans lot valide dedie.
 
 Les secrets doivent rester dans Coolify :
 
-- `DATABASE_URL` réelle ;
-- future clé `LLM_API_KEY` si un lot validé active un provider réel ;
+- `DATABASE_URL` reelle ;
+- future cle `LLM_API_KEY` si un lot valide active un provider reel ;
 - futurs secrets d'authentification ou stockage.
 
 ## PostgreSQL
 
-Préparer une base PostgreSQL dédiée à BlablaBox.
+La base PostgreSQL de production est connectee et les migrations Prisma ont ete appliquees.
 
 Recommandations :
 
-- utiliser une base PostgreSQL gérée par Coolify ou une base dédiée sur le VPS ;
-- utiliser un utilisateur PostgreSQL dédié ;
-- limiter les droits à la base BlablaBox ;
-- vérifier que `DATABASE_URL` pointe vers la bonne base avant toute migration ;
-- tester les migrations sur une base de test avant production si possible.
+- utiliser une base PostgreSQL geree par Coolify ou une base dediee sur le VPS ;
+- utiliser un utilisateur PostgreSQL dedie ;
+- limiter les droits a la base BlablaBox ;
+- verifier que `DATABASE_URL` pointe vers la bonne base avant toute migration ;
+- lancer les migrations de production avec `npm run db:migrate:deploy`.
 
 ## Prisma
 
-Les migrations Prisma sont versionnées dans `prisma/migrations`.
+Les migrations Prisma sont versionnees dans `prisma/migrations`.
 
 En production, utiliser :
 
@@ -105,73 +135,68 @@ Ne pas utiliser :
 npx prisma migrate dev
 ```
 
-`migrate dev` est réservé au développement local.
+`migrate dev` est reserve au developpement local.
 
 ## Healthcheck
 
-Après déploiement, vérifier :
+Apres deploiement, verifier :
 
 ```text
 /api/health
 ```
 
-Le endpoint doit répondre avec un statut HTTP `200`.
+Le endpoint doit repondre avec un statut HTTP `200`.
 
-## Hors périmètre de ce lot
+## Hors perimetre sans lot dedie
 
-Ne pas ajouter dans ce lot :
+Ne pas ajouter sans validation explicite :
 
 - Dockerfile ;
 - docker-compose ;
 - modification `next.config.ts` ;
-- déploiement ;
-- connexion VPS ;
-- configuration Coolify réelle ;
-- provider LLM réel activé ;
+- provider LLM reel active ;
 - TTS ;
 - MP3 ;
 - OCR ;
-- dictée ;
+- dictee ;
 - upload PDF/DOCX.
 
-## Checklist opérateur
+## Checklist operateur
 
-### Avant déploiement
+### Avant redeploiement
 
-- [ ] Vérifier que `npm run build` passe en local.
-- [ ] Vérifier que les migrations Prisma sont versionnées.
-- [ ] Préparer une base PostgreSQL dédiée.
-- [ ] Préparer `DATABASE_URL`.
-- [ ] Garder `LLM_PROVIDER=mock`.
-- [ ] Vérifier que `.env` n'est pas committé.
-- [ ] Vérifier que la branche GitHub `main` est à jour.
+- [ ] Verifier que les migrations Prisma sont versionnees.
+- [ ] Verifier que `DATABASE_URL` pointe vers la bonne base.
+- [ ] Garder `LLM_PROVIDER=mock` sauf lot provider reel valide.
+- [ ] Verifier que `.env` n'est pas committe.
+- [ ] Verifier que la branche GitHub `main` est a jour.
 
 ### Dans Coolify
 
-- [ ] Créer une application depuis GitHub.
-- [ ] Choisir le repository `digitalsaurien-git/BlablaBox`.
-- [ ] Choisir la branche `main`.
 - [ ] Utiliser Nixpacks / Node.
 - [ ] Renseigner les variables d'environnement.
 - [ ] Configurer le port `3000`.
-- [ ] Lancer le build.
-- [ ] Lancer la migration Prisma avec `npm run db:migrate:deploy` si nécessaire.
-- [ ] Vérifier `/api/health`.
+- [ ] Configurer la build command : `npx prisma generate && npm run build`.
+- [ ] Configurer la start command : `npm run start`.
+- [ ] Ne pas ajouter `npm ci` dans la build command si Nixpacks l'execute deja.
+- [ ] Lancer la migration Prisma avec `npm run db:migrate:deploy` si necessaire.
+- [ ] Verifier `/api/health`.
 
-### Après déploiement
+### Apres redeploiement
 
 - [ ] Ouvrir l'application.
-- [ ] Créer un projet test.
-- [ ] Générer un script avec le mock.
-- [ ] Vérifier la bibliothèque.
-- [ ] Supprimer le projet test.
-- [ ] Vérifier les logs Coolify.
+- [ ] Verifier `/projects`.
+- [ ] Verifier `/projects/new`.
+- [ ] Creer un projet test si necessaire.
+- [ ] Generer un script avec le mock.
+- [ ] Verifier les logs Coolify.
 
 ## Risques
 
 - Une mauvaise `DATABASE_URL` peut appliquer les migrations sur la mauvaise base.
 - Oublier `npx prisma generate` peut casser le build ou le runtime Prisma.
-- Lancer `prisma migrate dev` en production peut modifier l'historique de migration de façon inadaptée.
-- Activer `LLM_PROVIDER=openai` sans clé ou sans validation produit peut provoquer des erreurs ou des coûts.
-- Sans Auth.js, la bibliothèque reste globale temporairement.
-- Aucun stockage audio réel n'existe encore.
+- Ajouter `npm ci` dans la build command alors que Nixpacks l'execute deja peut provoquer l'erreur `EBUSY` sur `/app/node_modules/.cache`.
+- Lancer `prisma migrate dev` en production peut modifier l'historique de migration de facon inadaptee.
+- Activer `LLM_PROVIDER=openai` sans cle ou sans validation produit peut provoquer des erreurs ou des couts.
+- Sans Auth.js, la bibliotheque reste globale temporairement.
+- Aucun stockage audio reel n'existe encore.
