@@ -15,7 +15,6 @@ const deliveryTypeLabels: Record<DeliveryType, string> = {
 type OpenAIResponsesBody = {
   model: string;
   input: string;
-  temperature: number;
 };
 
 type OpenAIResponsesResult = {
@@ -54,10 +53,7 @@ export class OpenAILLMProvider implements LLMProvider {
     });
 
     if (!response.ok) {
-      const details = await response.text();
-      throw new Error(
-        `Erreur provider OpenAI (${response.status}) : ${details.slice(0, 300)}`,
-      );
+      throw new Error(`La génération du script OpenAI a échoué (${response.status}).`);
     }
 
     const data = (await response.json()) as OpenAIResponsesResult;
@@ -76,11 +72,11 @@ export class OpenAILLMProvider implements LLMProvider {
   private buildRequestBody(input: ScriptGenerationInput): OpenAIResponsesBody {
     return {
       model: this.model,
-      temperature: 0.7,
       input: [
         "Tu es le moteur narratif de BlablaBox.",
         "Génère un script audio pédagogique en français, en texte brut structuré, sans JSON ni Markdown complexe.",
         "Le script doit être clair, vivant, mémorisable et directement compatible avec un futur TTS.",
+        "N'invente jamais de faits absents de la source. Si le sujet est trop court, ambigu ou insuffisamment documenté, indique explicitement les limites dans le script et reste sur des formulations prudentes.",
         "Structure attendue : titre audio, accroche orale, objectif, contexte, progression, reformulation, points clés, résumé final, questions de révision, conclusion orientée réécoute.",
         "",
         `Titre : ${input.title}`,

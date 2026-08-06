@@ -1,6 +1,7 @@
 import { createProject } from "@/app/projects/actions";
 
 const durations = [3, 5, 10, 15, 20];
+const audiences = ["10-12 ans", "Collège", "Lycée", "Adulte"];
 const deliveryTypes = [
   { value: "IMMERSIVE_STORY", label: "Histoire immersive" },
   { value: "COURSE_SUMMARY", label: "Résumé de cours" },
@@ -61,11 +62,17 @@ export function ProjectForm({ hasError }: { hasError: boolean }) {
 
         <label className="grid gap-2">
           <span className="text-sm font-medium text-ink">Public cible</span>
-          <input
+          <select
             name="audience"
-            defaultValue="Apprenants curieux"
+            defaultValue="Collège"
             className="rounded-md border border-ink/15 bg-white px-4 py-3 outline-none transition focus:border-moss focus:ring-2 focus:ring-moss/20"
-          />
+          >
+            {audiences.map((audience) => (
+              <option key={audience} value={audience}>
+                {audience}
+              </option>
+            ))}
+          </select>
         </label>
 
         <label className="grid gap-2">

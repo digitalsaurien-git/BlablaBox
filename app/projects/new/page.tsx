@@ -17,8 +17,7 @@ export default async function NewProjectPage({ searchParams }: NewProjectPagePro
         </p>
         <h1 className="mt-2 text-3xl font-bold text-ink">Nouveau projet audio</h1>
         <p className="mt-3 text-ink/70">
-          Le lot actuel genere un script narratif via MockLLMProvider. Aucun appel
-          externe ni fichier MP3 n'est cree.
+          Transforme un texte ou un sujet en script pédagogique, puis génère son audio MP3 depuis la page du projet.
         </p>
       </div>
 

@@ -91,6 +91,12 @@ DATABASE_URL=postgresql://user:password@host:5432/blablabox
 LLM_PROVIDER=mock
 LLM_API_KEY=
 LLM_MODEL=gpt-5-mini
+TTS_PROVIDER=disabled
+TTS_API_KEY=
+TTS_MODEL=gpt-4o-mini-tts
+TTS_VOICE=coral
+TTS_MAX_SCRIPT_CHARACTERS=12000
+AUDIO_STORAGE_PATH=/data/blablabox/audio
 ```
 
 Pour le premier deploiement valide, `LLM_PROVIDER` est reste sur :
@@ -99,12 +105,19 @@ Pour le premier deploiement valide, `LLM_PROVIDER` est reste sur :
 LLM_PROVIDER=mock
 ```
 
-Ne pas activer OpenAI ou un provider payant sans lot valide dedie.
+Pour activer le parcours reel, definir explicitement `LLM_PROVIDER=openai` et
+`TTS_PROVIDER=openai`, puis renseigner les deux cles dans les secrets Coolify.
+Les valeurs `mock` et `disabled` n'effectuent aucun appel payant.
+
+Les appels OpenAI sont factures selon les modeles et volumes utilises. Surveiller
+la consommation du compte API et conserver une limite TTS adaptee. Un script qui
+depasse `TTS_MAX_SCRIPT_CHARACTERS` est refuse sans troncature.
 
 Les secrets doivent rester dans Coolify :
 
 - `DATABASE_URL` reelle ;
 - future cle `LLM_API_KEY` si un lot valide active un provider reel ;
+- `TTS_API_KEY` lorsque la synthese OpenAI est activee ;
 - futurs secrets d'authentification ou stockage.
 
 ## PostgreSQL
@@ -137,6 +150,52 @@ npx prisma migrate dev
 
 `migrate dev` est reserve au developpement local.
 
+La migration `20260806120000_add_real_audio_generation` est additive. Elle convertit
+les anciens statuts `NOT_STARTED` et `MOCK_READY` en `NOT_GENERATED`, puis ajoute les
+metadonnees audio. Avant le redeploiement applicatif :
+
+```bash
+npm run db:migrate:deploy
+```
+
+## Volume audio persistant
+
+Les MP3 ne doivent pas rester dans le systeme de fichiers ephemere du conteneur.
+Dans Coolify, creer un volume persistant et le monter exactement sur :
+
+```text
+/data/blablabox/audio
+```
+
+Configurer ensuite :
+
+```env
+AUDIO_STORAGE_PATH=/data/blablabox/audio
+```
+
+Le processus Node doit avoir les droits de creation, lecture, renommage et suppression
+sur ce dossier. Ne pas monter ce volume dans `public/` : les fichiers sont servis par
+la route applicative apres recherche du projet en base.
+
+## Procedure de mise en production du lot audio
+
+1. Sauvegarder la base PostgreSQL.
+2. Ajouter les variables LLM, TTS et `AUDIO_STORAGE_PATH` dans Coolify.
+3. Creer et monter le volume persistant audio.
+4. Deployer la version contenant la migration.
+5. Executer `npm run db:migrate:deploy` dans le conteneur de production.
+6. Redeployer avec `npx prisma generate && npm run build`, puis `npm run start`.
+7. Creer un projet de test, generer son script, puis son audio.
+8. Verifier l'ecoute sur `/api/projects/<id>/audio`.
+9. Verifier le telechargement sur `/api/projects/<id>/audio?download=1`.
+10. Redemarrer le conteneur et confirmer que le MP3 reste accessible grace au volume.
+
+La route ne prend jamais de chemin physique en parametre. Elle charge le projet par
+son identifiant, utilise uniquement sa reference de fichier en base et retourne 404
+si le projet ou le fichier est absent. Sans authentification, toute personne connaissant
+l'identifiant du projet peut toutefois demander cette route ; l'isolation utilisateur
+sera ajoutee avec l'authentification.
+
 ## Healthcheck
 
 Apres deploiement, verifier :
@@ -166,8 +225,9 @@ Ne pas ajouter sans validation explicite :
 ### Avant redeploiement
 
 - [ ] Verifier que les migrations Prisma sont versionnees.
+- [ ] Verifier que le volume audio persistant est monte sur `AUDIO_STORAGE_PATH`.
 - [ ] Verifier que `DATABASE_URL` pointe vers la bonne base.
-- [ ] Garder `LLM_PROVIDER=mock` sauf lot provider reel valide.
+- [ ] Garder `LLM_PROVIDER=mock` et `TTS_PROVIDER=disabled` tant que les appels reels ne sont pas souhaites.
 - [ ] Verifier que `.env` n'est pas committe.
 - [ ] Verifier que la branche GitHub `main` est a jour.
 
@@ -199,4 +259,5 @@ Ne pas ajouter sans validation explicite :
 - Lancer `prisma migrate dev` en production peut modifier l'historique de migration de facon inadaptee.
 - Activer `LLM_PROVIDER=openai` sans cle ou sans validation produit peut provoquer des erreurs ou des couts.
 - Sans Auth.js, la bibliotheque reste globale temporairement.
-- Aucun stockage audio reel n'existe encore.
+- Sans volume persistant, les MP3 peuvent disparaitre lors d'un redeploiement.
+- Sans authentification, la route audio n'applique pas encore de controle par utilisateur.

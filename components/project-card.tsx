@@ -12,6 +12,7 @@ type ProjectCardProps = {
     id: string;
     title: string;
     targetDurationMinutes: number;
+    audience: string;
     deliveryType: string;
     scriptStatus: string;
     audioStatus: string;
@@ -40,6 +41,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
         <span className="rounded bg-mist px-2 py-1">
           {deliveryTypeLabels[project.deliveryType] ?? "Résumé de cours"}
         </span>
+        <span className="rounded bg-mist px-2 py-1">{project.audience}</span>
         <span className="inline-flex items-center gap-1 rounded bg-mist px-2 py-1">
           <span aria-hidden="true">doc</span>
           {project.scriptStatus}

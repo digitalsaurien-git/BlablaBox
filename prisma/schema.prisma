@@ -14,8 +14,7 @@ enum ProjectStatus {
 }
 
 enum AudioStatus {
-  NOT_STARTED
-  MOCK_READY
+  NOT_GENERATED
   PENDING
   GENERATED
   FAILED
@@ -42,9 +41,13 @@ model Project {
   deliveryType          DeliveryType  @default(COURSE_SUMMARY)
   script                String?       @db.Text
   scriptStatus          ProjectStatus @default(DRAFT)
-  audioStatus           AudioStatus   @default(NOT_STARTED)
+  audioStatus           AudioStatus   @default(NOT_GENERATED)
   audioUrl              String?
+  audioFilePath         String?
   audioFormat           String?       @default("mp3")
+  audioDurationSeconds  Int?
+  audioGeneratedAt      DateTime?
+  audioErrorMessage     String?       @db.Text
   errorMessage          String?       @db.Text
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt

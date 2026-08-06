@@ -1,5 +1,30 @@
 # BlablaBox
 
+BlablaBox transforme un texte ou un sujet en script pedagogique puis en fichier MP3.
+Le script et l'audio sont deux actions distinctes : aucune synthese vocale n'est lancee
+automatiquement apres la generation du script.
+
+## Providers et audio local
+
+Par defaut, `LLM_PROVIDER=mock` et `TTS_PROVIDER=disabled`, donc aucun appel payant
+n'est effectue. Pour activer OpenAI, renseigner uniquement cote serveur :
+
+```env
+LLM_PROVIDER=openai
+LLM_API_KEY=...
+LLM_MODEL=gpt-5-mini
+TTS_PROVIDER=openai
+TTS_API_KEY=...
+TTS_MODEL=gpt-4o-mini-tts
+TTS_VOICE=coral
+TTS_MAX_SCRIPT_CHARACTERS=12000
+AUDIO_STORAGE_PATH=./storage/audio
+```
+
+Les MP3 generes sont des donnees d'execution ignorees par Git. En production, le
+dossier `AUDIO_STORAGE_PATH` doit etre un volume persistant. Voir
+`docs/deployment-coolify.md` pour la procedure complete.
+
 BlablaBox est un MVP Next.js qui transforme un texte ou un sujet libre en script audio pÃ©dagogique. Le lot actuel utilise `MockLLMProvider` par dÃ©faut : aucun appel IA externe, aucun TTS rÃ©el et aucun fichier MP3 ne sont gÃ©nÃ©rÃ©s.
 
 ## Stack

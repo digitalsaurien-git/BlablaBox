@@ -12,8 +12,7 @@ const scriptStatusLabels: Record<string, string> = {
 };
 
 const audioStatusLabels: Record<string, string> = {
-  NOT_STARTED: "Audio non démarré",
-  MOCK_READY: "Prêt pour audio futur",
+  NOT_GENERATED: "Audio non généré",
   PENDING: "Audio en attente",
   GENERATED: "Audio généré",
   FAILED: "Erreur audio",
@@ -43,7 +42,7 @@ export function ProjectMetaPanel({ project }: ProjectMetaPanelProps) {
     ["Niveau", project.level],
     ["Script", scriptStatusLabels[project.scriptStatus] ?? project.scriptStatus],
     ["Audio", audioStatusLabels[project.audioStatus] ?? project.audioStatus],
-    ["Format futur", project.audioFormat ?? "mp3"],
+    ["Format audio", project.audioFormat ?? "mp3"],
   ];
 
   return (

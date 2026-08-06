@@ -5,6 +5,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getLLMProvider } from "@/lib/providers/llm";
+import { getTTSProvider } from "@/lib/providers/tts";
+import { validateTTSScript, toPublicAudioError } from "@/lib/audio-generation";
+import { createAudioWriteTarget, finalizeAudioFile, removeStoredAudio, removeTemporaryAudio } from "@/lib/audio-storage";
 
 const allowedDeliveryTypes: DeliveryType[] = [
   "IMMERSIVE_STORY",
@@ -12,6 +15,7 @@ const allowedDeliveryTypes: DeliveryType[] = [
   "MEMORY_AUDIO_CARD",
   "REVIEW_QA",
 ];
+const allowedAudiences = ["10-12 ans", "Collège", "Lycée", "Adulte"];
 
 function readString(formData: FormData, key: string): string {
   const value = formData.get(key);
@@ -36,6 +40,12 @@ function readDeliveryType(formData: FormData): DeliveryType {
   return allowedDeliveryTypes.includes(value) ? value : "COURSE_SUMMARY";
 }
 
+function readAudience(formData: FormData): string {
+  const value = readString(formData, "audience");
+
+  return allowedAudiences.includes(value) ? value : "Collège";
+}
+
 function createTitle(sourceContent: string, learningObjective: string): string {
   const base = learningObjective || sourceContent;
   const normalized = base.replace(/\s+/g, " ").trim();
@@ -52,7 +62,7 @@ export async function createProject(formData: FormData) {
   const learningObjective = readString(formData, "learningObjective");
   const targetDurationMinutes = readDuration(formData);
   const deliveryType = readDeliveryType(formData);
-  const audience = readString(formData, "audience") || "Apprenants curieux";
+  const audience = readAudience(formData);
   const tone = readString(formData, "tone") || "Clair et vivant";
   const level = readString(formData, "level") || "Intermediaire";
 
@@ -89,7 +99,7 @@ export async function createProject(formData: FormData) {
         learningObjective,
         script: result.script,
         scriptStatus: "SCRIPT_GENERATED",
-        audioStatus: "MOCK_READY",
+        audioStatus: "NOT_GENERATED",
         audioFormat: "mp3",
         errorMessage: null,
       },
@@ -109,7 +119,7 @@ export async function createProject(formData: FormData) {
         level,
         learningObjective,
         scriptStatus: "SCRIPT_FAILED",
-        audioStatus: "NOT_STARTED",
+        audioStatus: "NOT_GENERATED",
         errorMessage:
           error instanceof Error ? error.message : "Erreur inconnue de génération",
       },
@@ -160,7 +170,7 @@ export async function regenerateProjectScript(formData: FormData) {
       data: {
         script: result.script,
         scriptStatus: "SCRIPT_GENERATED",
-        audioStatus: "MOCK_READY",
+        audioStatus: "NOT_GENERATED",
         errorMessage: null,
       },
     });
@@ -182,6 +192,63 @@ export async function regenerateProjectScript(formData: FormData) {
   redirect(`/projects/${project.id}`);
 }
 
+export async function generateProjectAudio(formData: FormData) {
+  const projectId = readString(formData, "projectId");
+  if (!projectId) redirect("/projects");
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) redirect("/projects");
+
+  let script: string;
+  try {
+    script = validateTTSScript(project.script);
+  } catch (error) {
+    await prisma.project.update({ where: { id: project.id }, data: { audioStatus: "FAILED", audioErrorMessage: toPublicAudioError(error) } });
+    revalidatePath(`/projects/${project.id}`);
+    return;
+  }
+
+  const claim = await prisma.project.updateMany({
+    where: { id: project.id, audioStatus: { not: "PENDING" } },
+    data: { audioStatus: "PENDING", audioErrorMessage: null },
+  });
+  if (claim.count === 0) return;
+
+  let target: Awaited<ReturnType<typeof createAudioWriteTarget>> | null = null;
+  let finalized = false;
+  let persisted = false;
+  try {
+    target = await createAudioWriteTarget();
+    const result = await getTTSProvider().generateSpeech({ script, outputFilePath: target.temporaryPath });
+    await finalizeAudioFile(target.temporaryPath, target.finalPath);
+    finalized = true;
+    await prisma.project.update({
+      where: { id: project.id },
+      data: {
+        audioStatus: "GENERATED",
+        audioFilePath: target.fileName,
+        audioUrl: `/api/projects/${project.id}/audio`,
+        audioFormat: result.format,
+        audioDurationSeconds: result.durationSeconds ?? null,
+        audioGeneratedAt: new Date(),
+        audioErrorMessage: null,
+      },
+    });
+    persisted = true;
+    if (project.audioFilePath && project.audioFilePath !== target.fileName) {
+      await removeStoredAudio(project.audioFilePath).catch(() => undefined);
+    }
+  } catch (error) {
+    if (target) {
+      await removeTemporaryAudio(target.temporaryPath);
+      if (finalized && !persisted) await removeStoredAudio(target.fileName).catch(() => undefined);
+    }
+    await prisma.project.update({ where: { id: project.id }, data: { audioStatus: "FAILED", audioErrorMessage: toPublicAudioError(error) } });
+  }
+
+  revalidatePath("/projects");
+  revalidatePath(`/projects/${project.id}`);
+}
+
 export async function deleteProject(formData: FormData) {
   const projectId = readString(formData, "projectId");
 
@@ -189,11 +256,13 @@ export async function deleteProject(formData: FormData) {
     redirect("/projects");
   }
 
-  await prisma.project.delete({
+  const project = await prisma.project.delete({
     where: {
       id: projectId,
     },
   });
+
+  await removeStoredAudio(project.audioFilePath).catch(() => undefined);
 
   revalidatePath("/projects");
   redirect("/projects");

@@ -4,7 +4,8 @@ import { DeleteProjectButton } from "@/components/delete-project-button";
 import { ProjectMetaPanel } from "@/components/project-meta-panel";
 import { RegenerateScriptButton } from "@/components/regenerate-script-button";
 import { ScriptView } from "@/components/script-view";
-import { deleteProject, regenerateProjectScript } from "@/app/projects/actions";
+import { GenerateAudioButton } from "@/components/generate-audio-button";
+import { deleteProject, generateProjectAudio, regenerateProjectScript } from "@/app/projects/actions";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +29,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
   }
 
   const hasError = project.scriptStatus === "SCRIPT_FAILED" || Boolean(project.errorMessage);
+  const hasAudio = Boolean(project.audioFilePath);
 
   return (
     <div className="grid gap-6 pb-8">
@@ -101,8 +103,39 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
         <ScriptView script={project.script} />
       </section>
 
-      <section className="rounded-md border border-ink/10 bg-paper p-4 text-sm leading-6 text-ink/70">
-        Audio futur : format cible {project.audioFormat ?? "mp3"}, statut {project.audioStatus}. Aucun lecteur, téléchargement ou fichier MP3 n'est ajouté dans ce lot.
+      <section className="grid gap-4 rounded-md border border-ink/10 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+          <div>
+            <h2 className="text-xl font-semibold text-ink">Audio MP3</h2>
+            <p className="mt-1 text-sm text-ink/60">Voix générée par intelligence artificielle.</p>
+          </div>
+          <form action={generateProjectAudio}>
+            <input type="hidden" name="projectId" value={project.id} />
+            <GenerateAudioButton disabled={!project.script || project.audioStatus === "PENDING"} />
+          </form>
+        </div>
+
+        {project.audioStatus === "PENDING" ? (
+          <p className="rounded-md bg-mist px-4 py-3 text-sm text-ink/70">Génération audio en cours...</p>
+        ) : null}
+
+        {project.audioErrorMessage ? (
+          <p className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{project.audioErrorMessage}</p>
+        ) : null}
+
+        {hasAudio ? (
+          <div className="grid gap-3">
+            {project.audioStatus !== "GENERATED" ? (
+              <p className="text-sm text-amber-800">Le lecteur contient le dernier audio généré avec succès. La tentative la plus récente n'a pas abouti.</p>
+            ) : null}
+            <audio controls preload="metadata" className="w-full" src={`/api/projects/${project.id}/audio`}>
+              Votre navigateur ne prend pas en charge la lecture audio.
+            </audio>
+            <a href={`/api/projects/${project.id}/audio?download=1`} className="inline-flex w-fit items-center justify-center rounded-md border border-ink/15 bg-paper px-4 py-2.5 text-sm font-semibold text-ink transition hover:border-moss hover:text-moss">
+              Télécharger le MP3
+            </a>
+          </div>
+        ) : null}
       </section>
     </div>
   );

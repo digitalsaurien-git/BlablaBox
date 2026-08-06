@@ -5,7 +5,7 @@
   ScriptGenerationResult,
 } from "./types";
 
-type AudienceKind = "young" | "school" | "adult";
+type AudienceKind = "preteen" | "middleSchool" | "highSchool" | "adult";
 type LevelKind = "simple" | "standard" | "advanced";
 
 type NarrativeProfile = {
@@ -57,12 +57,20 @@ function normalize(value: string): string {
 function detectAudience(audience: string): AudienceKind {
   const value = normalize(audience);
 
-  if (value.includes("10") || value.includes("11") || value.includes("12") || value.includes("enfant")) {
-    return "young";
+  if (value === "10-12 ans" || value.includes("10") || value.includes("11") || value.includes("12")) {
+    return "preteen";
   }
 
-  if (value.includes("college") || value.includes("collège") || value.includes("lycee") || value.includes("lycée") || value.includes("eleve") || value.includes("élève")) {
-    return "school";
+  if (value === "collège" || value.includes("college") || value.includes("collège")) {
+    return "middleSchool";
+  }
+
+  if (value === "lycée" || value.includes("lycee") || value.includes("lycée")) {
+    return "highSchool";
+  }
+
+  if (value === "adulte" || value.includes("adult")) {
+    return "adult";
   }
 
   return "adult";
@@ -87,8 +95,9 @@ function buildProfile(input: ScriptGenerationInput): NarrativeProfile {
   const levelKind = detectLevel(input.level);
 
   const sentenceStyleByAudience: Record<AudienceKind, string> = {
-    young: "phrases courtes, images simples et rythme rassurant",
-    school: "explication progressive, vocabulaire scolaire et exemples faciles a reutiliser",
+    preteen: "phrases courtes, images simples et rythme rassurant",
+    middleSchool: "explication progressive, vocabulaire scolaire et exemples faciles a reutiliser",
+    highSchool: "raisonnement structure, vocabulaire de cours et transitions explicites",
     adult: "ton direct, synthese claire et liens utiles pour comprendre vite",
   };
 
@@ -99,8 +108,9 @@ function buildProfile(input: ScriptGenerationInput): NarrativeProfile {
   };
 
   const exampleStyleByAudience: Record<AudienceKind, string> = {
-    young: "comme une scene que l'on pourrait imaginer dans une histoire",
-    school: "comme un exemple de cours que l'on peut redire a l'oral",
+    preteen: "comme une scene que l'on pourrait imaginer dans une histoire",
+    middleSchool: "comme un exemple de cours que l'on peut redire a l'oral",
+    highSchool: "comme un cas de cours que l'on peut expliquer avec une idee, une cause et une consequence",
     adult: "comme une situation concrete que l'on peut resumer rapidement",
   };
 
@@ -185,8 +195,9 @@ function buildSequence(
   };
 
   const audienceLineByKind: Record<AudienceKind, string> = {
-    young: "Imagine une petite scene : tu vois le probleme, puis tu reperes l'action qui permet d'avancer.",
-    school: "Dans une copie ou a l'oral, ce passage sert a montrer que tu connais le vocabulaire et que tu sais l'expliquer.",
+    preteen: "Imagine une petite scene : tu vois le probleme, puis tu reperes l'action qui permet d'avancer.",
+    middleSchool: "Dans une copie ou a l'oral, ce passage sert a montrer que tu connais le vocabulaire et que tu sais l'expliquer.",
+    highSchool: "Pour une reponse de lycee, ce passage sert a organiser l'idee, l'exemple et la nuance importante.",
     adult: "Pour le retenir efficacement, transforme ce passage en decision simple : qu'est-ce que je dois comprendre, puis reutiliser ?",
   };
 
