@@ -1,4 +1,4 @@
-import { MockLLMProvider } from "./mock-provider";
+import { LearningContentMockProvider } from "./mock-learning-provider";
 import { OpenAILLMProvider } from "./openai-provider";
 import type { LLMProvider } from "./types";
 
@@ -6,7 +6,7 @@ export function getLLMProvider(): LLMProvider {
   const provider = (process.env.LLM_PROVIDER ?? "mock").trim().toLowerCase();
 
   if (!provider || provider === "mock") {
-    return new MockLLMProvider();
+    return new LearningContentMockProvider();
   }
 
   if (provider === "openai") {
@@ -19,8 +19,15 @@ export function getLLMProvider(): LLMProvider {
 }
 
 export type {
+  AdaptationMode,
   DeliveryType,
+  LearningContentInput,
+  LearningContentResult,
+  LearningContentSource,
   LLMProvider,
+  ResearchMode,
+  ResponseMode,
   ScriptGenerationInput,
   ScriptGenerationResult,
+  VocabularyLevel,
 } from "./types";

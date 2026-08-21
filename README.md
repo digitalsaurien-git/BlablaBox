@@ -1,31 +1,24 @@
 # BlablaBox
 
-BlablaBox transforme un texte ou un sujet en script pedagogique puis en fichier MP3.
-Le script et l'audio sont deux actions distinctes : aucune synthese vocale n'est lancee
-automatiquement apres la generation du script.
+BlablaBox est une application Next.js mobile-first qui transforme une question ou un sujet en contenu pédagogique lisible et écoutable.
 
-## Providers et audio local
+## État fonctionnel
 
-Par defaut, `LLM_PROVIDER=mock` et `TTS_PROVIDER=disabled`, donc aucun appel payant
-n'est effectue. Pour activer OpenAI, renseigner uniquement cote serveur :
+Le dépôt contient désormais le parcours **Comprendre & écouter** :
 
-```env
-LLM_PROVIDER=openai
-LLM_API_KEY=...
-LLM_MODEL=gpt-5-mini
-TTS_PROVIDER=openai
-TTS_API_KEY=...
-TTS_MODEL=gpt-4o-mini-tts
-TTS_VOICE=coral
-TTS_MAX_SCRIPT_CHARACTERS=12000
-AUDIO_STORAGE_PATH=./storage/audio
-```
+- demande libre ;
+- réponse de type explication, histoire, révision ou réponse rapide ;
+- public, niveau, vocabulaire et adaptation pédagogiques ;
+- politique de recherche `AUTO`, `NONE` ou `REQUIRED` ;
+- recherche Web via la Responses API lorsque le provider OpenAI est activé ;
+- conservation et affichage des sources ;
+- génération MP3 via le `TTSProvider` existant ;
+- lecteur et téléchargement ;
+- bibliothèque compatible avec les anciens projets.
 
-Les MP3 generes sont des donnees d'execution ignorees par Git. En production, le
-dossier `AUDIO_STORAGE_PATH` doit etre un volume persistant. Voir
-`docs/deployment-coolify.md` pour la procedure complete.
+Le code du Lot A n'est pas considéré comme validé en production tant que la migration et le parcours réel n'ont pas été testés sur le staging Hostinger/Coolify.
 
-BlablaBox est un MVP Next.js qui transforme un texte ou un sujet libre en script audio pÃ©dagogique. Le lot actuel utilise `MockLLMProvider` par dÃ©faut : aucun appel IA externe, aucun TTS rÃ©el et aucun fichier MP3 ne sont gÃ©nÃ©rÃ©s.
+Le parcours **Dicter & rédiger** est affiché comme prochain parcours, mais n'est pas encore implémenté.
 
 ## Stack
 
@@ -34,83 +27,88 @@ BlablaBox est un MVP Next.js qui transforme un texte ou un sujet libre en script
 - Tailwind CSS
 - Prisma
 - PostgreSQL
+- OpenAI Responses API et Web Search côté serveur
+- OpenAI TTS côté serveur
 
-## FonctionnalitÃ©s du lot actuel
+## Providers
 
-- CrÃ©ation d'un projet audio.
-- ParamÃ¨tres pÃ©dagogiques : durÃ©e, public cible, ton, niveau, objectif.
-- Type de restitution : histoire immersive, rÃ©sumÃ© de cours, fiche audio de mÃ©morisation, questions-rÃ©ponses de rÃ©vision.
-- GÃ©nÃ©ration d'un script narratif simulÃ© mais rÃ©aliste.
-- BibliothÃ¨que globale temporaire.
-- Page dÃ©tail projet avec source, paramÃ¨tres, statuts, objectif et script.
-- RÃ©gÃ©nÃ©ration du script avec confirmation.
-- Suppression simple avec confirmation.
-- Architecture prÃªte pour un futur provider LLM rÃ©el, non activÃ© par dÃ©faut.
-
-## Cadre de dÃ©veloppement
-
-Les dÃ©cisions produit, rÃ¨gles de sÃ©curitÃ© et garde-fous des prochains lots sont dans `AGENTS.md`. Avant tout lot sensible, notamment Prisma, API rÃ©elle, TTS/MP3, Auth.js, Docker/Coolify, dÃ©ploiement ou action GitHub sensible, relire `AGENTS.md`, prÃ©senter un plan et attendre validation humaine.
-
-## Installation
-
-```bash
-npm install
-```
-
-## Configuration
-
-Copier `.env.example` vers `.env`, puis renseigner `DATABASE_URL` avec une base PostgreSQL locale.
-
-```bash
-npm run db:generate
-npx prisma migrate dev
-```
-
-`migrate dev` crÃ©e les tables en dÃ©veloppement. Ne pas utiliser cette commande en production.
-
-## DÃ©veloppement
-
-```bash
-npm run dev
-```
-
-L'application sera disponible sur `http://localhost:3000`.
-
-## VÃ©rification
-
-```bash
-npm run build
-```
-
-## Providers LLM
-
-Par dÃ©faut, BlablaBox utilise le provider local `MockLLMProvider` :
+Par défaut, aucun appel payant n'est effectué :
 
 ```env
 LLM_PROVIDER=mock
-LLM_API_KEY=
-LLM_MODEL=gpt-5-mini
+WEB_SEARCH_ENABLED=false
+TTS_PROVIDER=disabled
 ```
 
-Ce mode ne fait aucun appel externe et ne consomme aucune API payante.
-
-Un provider OpenAI est prÃ©parÃ© cÃ´tÃ© serveur pour un lot futur. Pour l'activer plus tard, il faudra dÃ©finir explicitement :
+Le staging fonctionnel utilisera explicitement :
 
 ```env
 LLM_PROVIDER=openai
-LLM_API_KEY=sk-...
+LLM_API_KEY=
 LLM_MODEL=gpt-5-mini
+WEB_SEARCH_ENABLED=true
+TTS_PROVIDER=openai
+TTS_API_KEY=
+TTS_MODEL=gpt-4o-mini-tts
+TTS_VOICE=coral
+TTS_MAX_SCRIPT_CHARACTERS=4096
 ```
 
-La clÃ© ne doit jamais Ãªtre prÃ©fixÃ©e par `NEXT_PUBLIC_` et ne doit jamais Ãªtre exposÃ©e cÃ´tÃ© client. Si `LLM_PROVIDER=openai` est demandÃ© sans `LLM_API_KEY`, l'application renvoie une erreur claire et la gÃ©nÃ©ration Ã©choue proprement.
+Le modèle LLM doit être confirmé comme compatible avec l'outil `web_search` avant l'activation staging. Les clés restent exclusivement dans les secrets Coolify et ne doivent jamais utiliser le préfixe `NEXT_PUBLIC_`.
 
+## Versionnement contenu et audio
 
-## Déploiement Coolify
+Chaque projet possède un `contentVersion`. Un MP3 n'est proposé que lorsque :
 
-Le premier déploiement Coolify est validé avec Nixpacks, `LLM_PROVIDER=mock`, le port `3000`, la build command `npx prisma generate && npm run build` et la start command `npm run start`.
+```text
+audioContentVersion === contentVersion
+```
 
-Les notes d'exploitation sont documentées dans `docs/deployment-coolify.md`.
+et que le fichier existe réellement dans le stockage persistant. Les MP3 historiques sont conservés physiquement, mais ne sont pas considérés comme synchronisés tant qu'ils n'ont pas été régénérés avec ce mécanisme.
 
-## Notes produit
+Un texte dépassant `TTS_MAX_SCRIPT_CHARACTERS` est conservé intégralement. La génération audio est refusée avec une explication ; aucune troncature silencieuse n'est effectuée.
 
-Le modÃ¨le `Project` contient dÃ©jÃ  un `userId` nullable pour prÃ©parer une future authentification sans bloquer le MVP technique actuel.
+## Installation et vérification locale
+
+```bash
+npm install
+npm run db:generate
+npx prisma validate
+npm test
+npm run build
+```
+
+Les tests mockent les réponses OpenAI et n'effectuent aucun appel payant.
+
+## Migrations
+
+Les migrations sont versionnées dans `prisma/migrations`.
+
+En staging et production :
+
+```bash
+npm run db:migrate:deploy
+```
+
+Ne jamais utiliser `prisma migrate dev` sur une base distante de production. La migration du Lot A est additive et ne renseigne pas `audioContentVersion` pour les anciens projets.
+
+## Coolify
+
+Le déploiement utilise Nixpacks avec :
+
+```text
+Build : npx prisma generate && npm run build
+Start : npm run start
+Port : 3000
+Healthcheck : /api/health
+```
+
+La procédure production et la préparation du staging sont détaillées dans `docs/deployment-coolify.md`.
+
+## Limites actuelles
+
+- aucune authentification : bibliothèque globale temporaire ;
+- aucun micro ou Speech-to-Text ;
+- aucune rédaction par paragraphes ;
+- aucune segmentation audio longue ;
+- aucun déploiement automatique du Lot A depuis cette branche.

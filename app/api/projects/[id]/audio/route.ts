@@ -12,9 +12,21 @@ export async function GET(request: Request, { params }: RouteContext) {
   const { id } = await params;
   const project = await prisma.project.findUnique({
     where: { id },
-    select: { id: true, audioFilePath: true, audioFormat: true },
+    select: {
+      id: true,
+      contentVersion: true,
+      audioContentVersion: true,
+      audioFilePath: true,
+      audioFormat: true,
+    },
   });
-  if (!project?.audioFilePath) return NextResponse.json({ error: "Audio introuvable." }, { status: 404 });
+  if (
+    !project?.audioFilePath ||
+    project.audioContentVersion === null ||
+    project.audioContentVersion !== project.contentVersion
+  ) {
+    return NextResponse.json({ error: "Audio introuvable." }, { status: 404 });
+  }
 
   try {
     const filePath = resolveStoredAudioPath(project.audioFilePath);

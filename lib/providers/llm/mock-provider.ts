@@ -1,6 +1,5 @@
 ﻿import type {
   DeliveryType,
-  LLMProvider,
   ScriptGenerationInput,
   ScriptGenerationResult,
 } from "./types";
@@ -297,7 +296,7 @@ function buildBody(
     .join("\n\n");
 }
 
-export class MockLLMProvider implements LLMProvider {
+export class MockLLMProvider {
   async generateAudioScript(
     input: ScriptGenerationInput,
   ): Promise<ScriptGenerationResult> {

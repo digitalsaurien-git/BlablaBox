@@ -1,4 +1,4 @@
-const DEFAULT_MAX_SCRIPT_CHARACTERS = 12_000;
+const DEFAULT_MAX_SCRIPT_CHARACTERS = 4_096;
 
 export function getMaxTTSScriptCharacters(): number {
   const configured = Number(process.env.TTS_MAX_SCRIPT_CHARACTERS);
@@ -10,7 +10,7 @@ export function validateTTSScript(script: string | null): string {
   if (!normalized) throw new Error("Le script est vide. Générez et validez un script avant de créer l'audio.");
   const maximum = getMaxTTSScriptCharacters();
   if (normalized.length > maximum) {
-    throw new Error(`Le script contient ${normalized.length} caractères, au-delà de la limite de ${maximum}. Choisissez une durée plus courte. La génération par chapitres sera proposée dans une version future.`);
+    throw new Error(`Le texte complet est conservé, mais il contient ${normalized.length} caractères et dépasse la limite de ${maximum} caractères pour l'audio actuel. Une version condensée ou une lecture segmentée sera proposée ultérieurement.`);
   }
   return normalized;
 }

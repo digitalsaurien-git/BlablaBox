@@ -91,11 +91,12 @@ DATABASE_URL=postgresql://user:password@host:5432/blablabox
 LLM_PROVIDER=mock
 LLM_API_KEY=
 LLM_MODEL=gpt-5-mini
+WEB_SEARCH_ENABLED=false
 TTS_PROVIDER=disabled
 TTS_API_KEY=
 TTS_MODEL=gpt-4o-mini-tts
 TTS_VOICE=coral
-TTS_MAX_SCRIPT_CHARACTERS=12000
+TTS_MAX_SCRIPT_CHARACTERS=4096
 AUDIO_STORAGE_PATH=/data/blablabox/audio
 ```
 
@@ -206,6 +207,59 @@ Apres deploiement, verifier :
 
 Le endpoint doit repondre avec un statut HTTP `200`.
 
+## Staging Lot A - Comprendre et ecouter
+
+Le Lot A doit d'abord etre valide sur une application Coolify distincte. Le code de
+la branche de lot n'est pas encore deploye et sa migration n'a ete appliquee sur
+aucune base.
+
+Configuration recommandee :
+
+- URL : `https://blablabox-staging.digitalsaurien.net` ;
+- depot GitHub identique ;
+- branche : `codex/lot-a-server-first` ;
+- application Coolify distincte ;
+- base et utilisateur PostgreSQL distincts ;
+- volume audio distinct monte sur `/data/blablabox-staging/audio` ;
+- acces staging protege tant que l'authentification BlablaBox n'existe pas.
+
+Variables staging attendues :
+
+```env
+NODE_ENV=production
+NEXT_PUBLIC_APP_URL=https://blablabox-staging.digitalsaurien.net
+PORT=3000
+DATABASE_URL=postgresql://<staging-user>:<secret>@<host>:5432/blablabox_staging
+LLM_PROVIDER=openai
+LLM_API_KEY=<secret-coolify>
+LLM_MODEL=<modele-responses-compatible-web-search>
+WEB_SEARCH_ENABLED=true
+TTS_PROVIDER=openai
+TTS_API_KEY=<secret-coolify>
+TTS_MODEL=gpt-4o-mini-tts
+TTS_VOICE=coral
+TTS_MAX_SCRIPT_CHARACTERS=4096
+AUDIO_STORAGE_PATH=/data/blablabox-staging/audio
+```
+
+Procedure staging, apres validation humaine du commit et du push :
+
+1. Creer la base, l'utilisateur, l'application, le domaine et le volume staging.
+2. Configurer les secrets uniquement dans Coolify.
+3. Verifier que `DATABASE_URL` cible bien `blablabox_staging`.
+4. Deployer la branche avec `npx prisma generate && npm run build`.
+5. Executer `npm run db:migrate:deploy` contre la base staging uniquement.
+6. Verifier `npx prisma migrate status` puis `/api/health`.
+7. Tester une explication factuelle avec recherche et sources.
+8. Tester une histoire creative sans recherche inutile.
+9. Generer, lire puis recharger un MP3.
+10. Regenerer le contenu et confirmer que l'ancien MP3 disparait du lecteur.
+11. Redemarrer l'application et confirmer la persistance du nouveau MP3.
+
+La production reste sur `main`, sa base et son volume actuels jusqu'a validation
+complete du staging. Aucun fichier ne doit etre modifie directement dans un
+conteneur Coolify.
+
 ## Hors perimetre sans lot dedie
 
 Ne pas ajouter sans validation explicite :
@@ -213,9 +267,8 @@ Ne pas ajouter sans validation explicite :
 - Dockerfile ;
 - docker-compose ;
 - modification `next.config.ts` ;
-- provider LLM reel active ;
-- TTS ;
-- MP3 ;
+- activation reelle hors staging valide ;
+- segmentation ou concatenation audio longue ;
 - OCR ;
 - dictee ;
 - upload PDF/DOCX.
