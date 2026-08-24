@@ -52,6 +52,16 @@ export function resolveStoredAudioPath(fileName: string): string {
   return assertInsideStorage(path.join(getAudioStorageRoot(), fileName));
 }
 
+export async function storedAudioExists(fileName: string | null): Promise<boolean> {
+  if (!fileName) return false;
+  try {
+    const fileStats = await stat(resolveStoredAudioPath(fileName));
+    return fileStats.isFile() && fileStats.size > 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function removeStoredAudio(fileName: string | null): Promise<void> {
   if (!fileName) return;
   await rm(resolveStoredAudioPath(fileName), { force: true });
