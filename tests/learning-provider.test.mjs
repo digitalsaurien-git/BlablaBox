@@ -14,7 +14,7 @@ const input = {
   researchMode: "AUTO",
 };
 
-test("OpenAI transmet AUTO à Web Search et extrait les sources sans appel réel", async () => {
+test("OpenAI transmet AUTO et conserve uniquement les sources citées sans appel réel", async () => {
   const originalFetch = globalThis.fetch;
   let requestBody;
   globalThis.fetch = async (_url, options) => {
@@ -60,13 +60,15 @@ test("OpenAI transmet AUTO à Web Search et extrait les sources sans appel réel
     }).generateLearningContent(input);
     assert.equal(requestBody.tool_choice, "auto");
     assert.deepEqual(requestBody.tools, [{ type: "web_search" }]);
-    assert.deepEqual(requestBody.include, ["web_search_call.action.sources"]);
+    assert.equal(requestBody.include, undefined);
     assert.match(requestBody.input, /Concentration|séquences courtes/i);
-    assert.equal(result.content, "Une cellule est une unité du vivant.");
+    assert.equal(result.content, "Une cellule [1] est une unité du vivant.");
     assert.equal(result.researchUsed, true);
-    assert.equal(result.sources.length, 2);
+    assert.equal(result.sources.length, 1);
     assert.equal(result.sources[0].domain, "example.org");
-    assert.equal(result.sources[0].citationStart, 0);
+    assert.equal(result.sources[0].citationStart, result.content.indexOf("[1]"));
+    assert.ok(result.sources.every((source) => source.domain !== "example.net"));
+    assert.match(requestBody.input, /N'ajoute aucune section finale Sources/i);
   } finally {
     globalThis.fetch = originalFetch;
   }

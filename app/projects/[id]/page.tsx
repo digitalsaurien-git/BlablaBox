@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { DeleteProjectButton } from "@/components/delete-project-button";
 import { ProjectMetaPanel } from "@/components/project-meta-panel";
 import { ProjectSources } from "@/components/project-sources";
+import { ContinuousAudioPlayer } from "@/components/continuous-audio-player";
 import { RegenerateScriptButton } from "@/components/regenerate-script-button";
 import { ScriptView } from "@/components/script-view";
 import { GenerateAudioButton } from "@/components/generate-audio-button";
@@ -12,8 +13,7 @@ import {
   regenerateProjectScript,
 } from "@/app/projects/actions";
 import { regenerateUnderstandProject } from "@/app/understand/actions";
-import { getMaxTTSScriptCharacters } from "@/lib/audio-generation";
-import { storedAudioExists } from "@/lib/audio-storage";
+import { getStoredAudioPlayback, storedAudioExists } from "@/lib/audio-storage";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -35,14 +35,19 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
   const audioVersionMatches =
     project.audioContentVersion !== null &&
     project.audioContentVersion === project.contentVersion;
+  const audioPlayback = audioVersionMatches
+    ? await getStoredAudioPlayback(project.audioFilePath).catch(() => null)
+    : null;
   const audioFileExists = audioVersionMatches
     ? await storedAudioExists(project.audioFilePath)
     : false;
-  const hasCurrentAudio = audioVersionMatches && audioFileExists;
+  const hasCurrentAudio = audioVersionMatches && audioFileExists && Boolean(audioPlayback);
   const hasObsoleteAudio = Boolean(project.audioFilePath) && !audioVersionMatches;
-  const maximumAudioCharacters = getMaxTTSScriptCharacters();
-  const contentLength = project.script?.trim().length ?? 0;
-  const contentTooLong = contentLength > maximumAudioCharacters;
+  const audioSources = audioPlayback?.segments.map((_, index) =>
+    audioPlayback.segmented
+      ? `/api/projects/${project.id}/audio?segment=${index}`
+      : `/api/projects/${project.id}/audio`,
+  ) ?? [];
   const regenerateAction = isUnderstand
     ? regenerateUnderstandProject
     : regenerateProjectScript;
@@ -139,16 +144,10 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
           <form action={generateProjectAudio}>
             <input type="hidden" name="projectId" value={project.id} />
             <GenerateAudioButton
-              disabled={!project.script || project.audioStatus === "PENDING" || contentTooLong}
+              disabled={!project.script || project.audioStatus === "PENDING"}
             />
           </form>
         </div>
-
-        {contentTooLong ? (
-          <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
-            Le texte intégral est conservé, mais ses {contentLength} caractères dépassent la limite audio actuelle de {maximumAudioCharacters}. Une version condensée ou segmentée sera proposée ultérieurement.
-          </p>
-        ) : null}
 
         {project.audioStatus === "PENDING" ? (
           <p className="rounded-xl bg-mist px-4 py-3 text-sm text-ink/70">Génération audio en cours...</p>
@@ -179,19 +178,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
                 Le lecteur conserve le dernier audio valide de cette même version du texte.
               </p>
             ) : null}
-            <audio controls
-              preload="metadata"
-              className="w-full"
-              src={`/api/projects/${project.id}/audio`}
-            >
-              Votre navigateur ne prend pas en charge la lecture audio.
-            </audio>
-            <a
-              href={`/api/projects/${project.id}/audio?download=1`}
-              className="inline-flex w-fit items-center justify-center rounded-xl border border-ink/15 bg-paper px-4 py-2.5 text-sm font-semibold text-ink transition hover:border-moss hover:text-moss"
-            >
-              Télécharger le MP3
-            </a>
+            <ContinuousAudioPlayer sources={audioSources} />
           </div>
         ) : null}
       </section>

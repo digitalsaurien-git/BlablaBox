@@ -3,6 +3,7 @@ import type {
   LearningContentSource,
   ResponseMode,
 } from "./providers/llm/types";
+import { normalizeSourceUrl } from "./source-citations.ts";
 
 export function createLearningTitle(userRequest: string): string {
   const normalized = userRequest.replace(/\s+/g, " ").trim();
@@ -27,9 +28,12 @@ export function sanitizeLearningSources(
   const seenUrls = new Set<string>();
 
   for (const source of sources) {
+    if (safeSources.length >= 8) break;
     let parsedUrl: URL;
+    const normalizedUrl = normalizeSourceUrl(source.url);
+    if (!normalizedUrl) continue;
     try {
-      parsedUrl = new URL(source.url);
+      parsedUrl = new URL(normalizedUrl);
     } catch {
       continue;
     }

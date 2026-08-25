@@ -24,7 +24,8 @@ export function ProjectSources({
 }) {
   const safeSources = sources
     .map((source) => ({ ...source, safeUrl: safeExternalUrl(source.url) }))
-    .filter((source): source is ProjectSource & { safeUrl: string } => Boolean(source.safeUrl));
+    .filter((source): source is ProjectSource & { safeUrl: string } => Boolean(source.safeUrl))
+    .slice(0, 8);
 
   return (
     <section className="grid gap-4 rounded-2xl border border-ink/10 bg-white p-4 shadow-sm sm:p-5">
@@ -41,14 +42,17 @@ export function ProjectSources({
         <ol className="grid gap-3">
           {safeSources.map((source) => (
             <li key={source.id} className="rounded-xl bg-mist p-3">
-              <a
-                href={source.safeUrl}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="font-semibold text-moss underline decoration-moss/30 underline-offset-4 hover:decoration-moss"
-              >
-                {source.title ?? source.domain ?? source.safeUrl}
-              </a>
+              <div className="flex items-start gap-2">
+                <span className="font-semibold text-ink/60">[{source.sourceOrder + 1}]</span>
+                <a
+                  href={source.safeUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="font-semibold text-moss underline decoration-moss/30 underline-offset-4 hover:decoration-moss"
+                >
+                  {source.title ?? source.domain ?? source.safeUrl}
+                </a>
+              </div>
               {source.domain ? (
                 <p className="mt-1 break-all text-xs text-ink/55">{source.domain}</p>
               ) : null}
