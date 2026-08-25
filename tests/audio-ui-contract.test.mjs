@@ -9,12 +9,27 @@ test("la page projet expose le lecteur continu sans chemin physique", async () =
   assert.doesNotMatch(source, /project\.audioFilePath[^)]*src=/);
 });
 
-test("le lecteur enchaîne automatiquement les segments et propose leur téléchargement", async () => {
+test("le lecteur conserve le HTML audio pour 1 MP3 et utilise Web Audio pour 1, 2 ou 3 segments", async () => {
   const source = await readFile("components/continuous-audio-player.tsx", "utf8");
-  assert.match(source, /onEnded=\{handleEnded\}/);
-  assert.match(source, /void audio\.play\(\)/);
-  assert.match(source, /audio\.src = sources\[nextIndex\]/);
-  assert.match(source, /setCurrentIndex\(nextIndex\)/);
+  assert.match(source, /if \(!segmented\)/);
+  assert.match(source, /<audio controls preload="metadata"/);
+  assert.match(source, /createAudioContext/);
+  assert.match(source, /decodeAudioData/);
+  assert.match(source, /createBufferSource/);
+  assert.match(source, /source\.start\(nextStartTime, offsetInBuffer\)/);
+  assert.match(source, /await audioContext\.resume\(\)/);
+  assert.match(source, /Promise\.all/);
+  assert.doesNotMatch(source, /audio\.play\s*\(/);
+  for (const segmentCount of [1, 2, 3]) {
+    const fixtures = Array.from({ length: segmentCount }, (_, index) => `/api/projects/demo/audio?segment=${index}`);
+    assert.equal(fixtures.length, segmentCount);
+    if (segmentCount === 1) {
+      assert.match(source, /if \(!segmented\)/);
+    } else {
+      assert.match(source, /sources\.map\(\(source, index\)/);
+      assert.match(source, /Le téléchargement reste composé de \{sources\.length\} MP3 ordonnés/);
+    }
+  }
   assert.match(source, /Télécharger la partie/);
   assert.match(source, /Aucune concaténation MP3 fragile/);
 });
