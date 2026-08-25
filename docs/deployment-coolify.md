@@ -97,6 +97,7 @@ TTS_API_KEY=
 TTS_MODEL=gpt-4o-mini-tts
 TTS_VOICE=coral
 TTS_MAX_SCRIPT_CHARACTERS=4096
+TTS_SEGMENT_TARGET_CHARACTERS=3500
 AUDIO_STORAGE_PATH=/data/blablabox/audio
 ```
 
@@ -112,7 +113,8 @@ Les valeurs `mock` et `disabled` n'effectuent aucun appel payant.
 
 Les appels OpenAI sont factures selon les modeles et volumes utilises. Surveiller
 la consommation du compte API et conserver une limite TTS adaptee. Un script qui
-depasse `TTS_MAX_SCRIPT_CHARACTERS` est refuse sans troncature.
+depasse `TTS_MAX_SCRIPT_CHARACTERS` est segmente autour de 3500 caracteres, sans
+troncature et sans coupe au milieu d'un mot.
 
 Les secrets doivent rester dans Coolify :
 
@@ -187,8 +189,8 @@ la route applicative apres recherche du projet en base.
 5. Executer `npm run db:migrate:deploy` dans le conteneur de production.
 6. Redeployer avec `npx prisma generate && npm run build`, puis `npm run start`.
 7. Creer un projet de test, generer son script, puis son audio.
-8. Verifier l'ecoute sur `/api/projects/<id>/audio`.
-9. Verifier le telechargement sur `/api/projects/<id>/audio?download=1`.
+8. Verifier l'ecoute continue, y compris avec un contenu de plus de 4096 caracteres.
+9. Verifier le telechargement du MP3 unique ou des parties MP3 numerotees.
 10. Redemarrer le conteneur et confirmer que le MP3 reste accessible grace au volume.
 
 La route ne prend jamais de chemin physique en parametre. Elle charge le projet par
@@ -268,7 +270,7 @@ Ne pas ajouter sans validation explicite :
 - docker-compose ;
 - modification `next.config.ts` ;
 - activation reelle hors staging valide ;
-- segmentation ou concatenation audio longue ;
+- concatenation des segments audio en un MP3 unique ;
 - OCR ;
 - dictee ;
 - upload PDF/DOCX.

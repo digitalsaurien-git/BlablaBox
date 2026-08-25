@@ -3,13 +3,16 @@ import type {
   DeliveryType,
   LearningContentInput,
   LearningContentResult,
-  LearningContentSource,
   LLMProvider,
   ResponseMode,
   ScriptGenerationInput,
   ScriptGenerationResult,
   VocabularyLevel,
 } from "./types";
+import {
+  formatCitedLearningContent,
+  type RawUrlCitation,
+} from "../../source-citations.ts";
 
 const deliveryTypeLabels: Record<DeliveryType, string> = {
   IMMERSIVE_STORY: "Histoire immersive",
@@ -43,20 +46,12 @@ type OpenAIResponsesBody = {
   input: string;
   tools?: Array<{ type: "web_search" }>;
   tool_choice?: "auto" | "required";
-  include?: Array<"web_search_call.action.sources">;
 };
 
 type OpenAIResponsesResult = {
   output_text?: string;
   output?: Array<{
     type?: string;
-    action?: {
-      sources?: Array<{
-        type?: string;
-        url?: string;
-        title?: string;
-      }>;
-    };
     content?: Array<{
       text?: string;
       type?: string;
@@ -142,7 +137,8 @@ export class OpenAILLMProvider implements LLMProvider {
     }
 
     const data = (await response.json()) as OpenAIResponsesResult;
-    const content = this.extractText(data);
+    const extracted = this.extractCitedLearningContent(data);
+    const content = extracted.content;
     if (!content) {
       throw new Error("Le provider OpenAI n'a pas renvoyé de contenu exploitable.");
     }
@@ -152,7 +148,7 @@ export class OpenAILLMProvider implements LLMProvider {
       throw new Error("La recherche documentaire requise n'a pas été effectuée.");
     }
 
-    const sources = this.extractSources(data);
+    const sources = extracted.sources;
     if (researchUsed && sources.length === 0) {
       throw new Error("La recherche documentaire n'a renvoyé aucune source exploitable.");
     }
@@ -195,6 +191,8 @@ export class OpenAILLMProvider implements LLMProvider {
         "Réponds à la demande en texte clair, structuré et directement lisible à l'écran comme à l'oral.",
         "Vise une réponse complète mais suffisamment concise pour tenir sous environ 3 800 caractères.",
         "Ne tronque jamais une phrase et ne prétends jamais avoir vérifié une information sans source.",
+        "N'ajoute aucune section finale Sources ou Références : BlablaBox construit cette section depuis les citations structurées.",
+        "N'écris aucune URL ni lien Markdown dans la réponse. L'application ajoutera elle-même les marqueurs courts [1], [2] depuis les annotations Web Search.",
         `Type de réponse : ${responseModeLabels[input.responseMode]}.`,
         `Public : ${input.audience}.`,
         `Niveau : ${input.level}.`,
@@ -214,7 +212,6 @@ export class OpenAILLMProvider implements LLMProvider {
     if (useWebSearch) {
       body.tools = [{ type: "web_search" }];
       body.tool_choice = input.researchMode === "REQUIRED" ? "required" : "auto";
-      body.include = ["web_search_call.action.sources"];
     }
 
     return body;
@@ -233,49 +230,41 @@ export class OpenAILLMProvider implements LLMProvider {
     return chunks?.join("\n").trim() ?? "";
   }
 
-  private extractSources(data: OpenAIResponsesResult): LearningContentSource[] {
-    const sources = new Map<string, Omit<LearningContentSource, "sourceOrder">>();
+  private extractCitedLearningContent(
+    data: OpenAIResponsesResult,
+  ): Pick<LearningContentResult, "content" | "sources"> {
+    const chunks: string[] = [];
+    const citations: RawUrlCitation[] = [];
+    let offset = 0;
 
     for (const item of data.output ?? []) {
       for (const content of item.content ?? []) {
+        if (!content.text) continue;
+        if (chunks.length > 0) offset += 1;
+        const blockOffset = offset;
+        chunks.push(content.text);
         for (const annotation of content.annotations ?? []) {
           if (annotation.type !== "url_citation" || !annotation.url) continue;
-          sources.set(annotation.url, {
+          citations.push({
             url: annotation.url,
             title: annotation.title,
-            domain: this.extractDomain(annotation.url),
-            citationStart: annotation.start_index,
-            citationEnd: annotation.end_index,
+            startIndex: Number.isInteger(annotation.start_index)
+              ? blockOffset + annotation.start_index!
+              : undefined,
+            endIndex: Number.isInteger(annotation.end_index)
+              ? blockOffset + annotation.end_index!
+              : undefined,
           });
         }
+        offset += content.text.length;
       }
     }
 
-    for (const item of data.output ?? []) {
-      for (const source of item.action?.sources ?? []) {
-        if (!source.url) continue;
-        const existing = sources.get(source.url);
-        sources.set(source.url, {
-          url: source.url,
-          title: existing?.title ?? source.title,
-          domain: existing?.domain ?? this.extractDomain(source.url),
-          citationStart: existing?.citationStart,
-          citationEnd: existing?.citationEnd,
-        });
-      }
-    }
-
-    return Array.from(sources.values()).map((source, sourceOrder) => ({
-      ...source,
-      sourceOrder,
-    }));
-  }
-
-  private extractDomain(url: string): string | undefined {
-    try {
-      return new URL(url).hostname.replace(/^www\./, "");
-    } catch {
-      return undefined;
-    }
+    const rawContent = chunks.length > 0 ? chunks.join("\n") : data.output_text ?? "";
+    const formatted = formatCitedLearningContent(rawContent, citations);
+    return {
+      content: formatted.content,
+      sources: formatted.sources,
+    };
   }
 }

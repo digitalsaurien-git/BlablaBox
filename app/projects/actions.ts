@@ -7,12 +7,8 @@ import { prisma } from "@/lib/prisma";
 import { getLLMProvider } from "@/lib/providers/llm";
 import { getTTSProvider } from "@/lib/providers/tts";
 import { validateTTSScript, toPublicAudioError } from "@/lib/audio-generation";
-import {
-  createAudioWriteTarget,
-  finalizeAudioFile,
-  removeStoredAudio,
-  removeTemporaryAudio,
-} from "@/lib/audio-storage";
+import { removeStoredAudio } from "@/lib/audio-storage";
+import { generateSegmentedStoredAudio } from "@/lib/segmented-audio-generation";
 
 const allowedDeliveryTypes: DeliveryType[] = [
   "IMMERSIVE_STORY",
@@ -203,49 +199,40 @@ export async function generateProjectAudio(formData: FormData) {
   });
   if (claim.count === 0) return;
 
-  let target: Awaited<ReturnType<typeof createAudioWriteTarget>> | null = null;
-  let finalized = false;
-  let persisted = false;
   try {
-    target = await createAudioWriteTarget();
-    const result = await getTTSProvider().generateSpeech({
+    const generation = await generateSegmentedStoredAudio({
       script,
-      outputFilePath: target.temporaryPath,
-    });
-    await finalizeAudioFile(target.temporaryPath, target.finalPath);
-    finalized = true;
-
-    const saved = await prisma.project.updateMany({
-      where: { id: project.id, contentVersion },
-      data: {
-        audioStatus: "GENERATED",
-        audioContentVersion: contentVersion,
-        audioFilePath: target.fileName,
-        audioUrl: `/api/projects/${project.id}/audio`,
-        audioFormat: result.format,
-        audioDurationSeconds: result.durationSeconds ?? null,
-        audioGeneratedAt: new Date(),
-        audioErrorMessage: null,
+      provider: getTTSProvider(),
+      publish: async ({ manifestFileName, durationSeconds }) => {
+        const saved = await prisma.project.updateMany({
+          where: { id: project.id, contentVersion, audioStatus: "PENDING" },
+          data: {
+            audioStatus: "GENERATED",
+            audioContentVersion: contentVersion,
+            audioFilePath: manifestFileName,
+            audioUrl: `/api/projects/${project.id}/audio`,
+            audioFormat: "mp3",
+            audioDurationSeconds: durationSeconds,
+            audioGeneratedAt: new Date(),
+            audioErrorMessage: null,
+          },
+        });
+        return saved.count > 0;
       },
     });
 
-    if (saved.count === 0) {
-      await removeStoredAudio(target.fileName).catch(() => undefined);
+    if (!generation.published || !generation.manifestFileName) {
       revalidatePath(`/projects/${project.id}`);
       return;
     }
 
-    persisted = true;
-    if (project.audioFilePath && project.audioFilePath !== target.fileName) {
+    if (
+      project.audioFilePath &&
+      project.audioFilePath !== generation.manifestFileName
+    ) {
       await removeStoredAudio(project.audioFilePath).catch(() => undefined);
     }
   } catch (error) {
-    if (target) {
-      await removeTemporaryAudio(target.temporaryPath);
-      if (finalized && !persisted) {
-        await removeStoredAudio(target.fileName).catch(() => undefined);
-      }
-    }
     await prisma.project.updateMany({
       where: { id: project.id, contentVersion },
       data: {

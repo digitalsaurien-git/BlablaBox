@@ -16,8 +16,6 @@ Le dépôt contient désormais le parcours **Comprendre & écouter** :
 - lecteur et téléchargement ;
 - bibliothèque compatible avec les anciens projets.
 
-Le code du Lot A n'est pas considéré comme validé en production tant que la migration et le parcours réel n'ont pas été testés sur le staging Hostinger/Coolify.
-
 Le parcours **Dicter & rédiger** est affiché comme prochain parcours, mais n'est pas encore implémenté.
 
 ## Stack
@@ -52,6 +50,7 @@ TTS_API_KEY=
 TTS_MODEL=gpt-4o-mini-tts
 TTS_VOICE=coral
 TTS_MAX_SCRIPT_CHARACTERS=4096
+TTS_SEGMENT_TARGET_CHARACTERS=3500
 ```
 
 Le modèle LLM doit être confirmé comme compatible avec l'outil `web_search` avant l'activation staging. Les clés restent exclusivement dans les secrets Coolify et ne doivent jamais utiliser le préfixe `NEXT_PUBLIC_`.
@@ -66,7 +65,11 @@ audioContentVersion === contentVersion
 
 et que le fichier existe réellement dans le stockage persistant. Les MP3 historiques sont conservés physiquement, mais ne sont pas considérés comme synchronisés tant qu'ils n'ont pas été régénérés avec ce mécanisme.
 
-Un texte dépassant `TTS_MAX_SCRIPT_CHARACTERS` est conservé intégralement. La génération audio est refusée avec une explication ; aucune troncature silencieuse n'est effectuée.
+Un texte dépassant la limite d'un appel TTS est conservé intégralement en base et découpé automatiquement en segments d'environ `TTS_SEGMENT_TARGET_CHARACTERS` caractères. Les paragraphes puis les fins de phrase sont privilégiés. Tous les segments doivent réussir avant la publication de l'audio courant.
+
+Le lecteur enchaîne les segments automatiquement. Pour un contenu segmenté, le téléchargement propose les MP3 numérotés dans l'ordre ; BlablaBox ne réalise aucune concaténation binaire MP3 fragile.
+
+Les sources affichées proviennent uniquement des annotations réellement citées dans la réponse, sont dédupliquées, débarrassées des paramètres de tracking évidents et limitées à huit. Les marqueurs courts `[1]`, `[2]` sont construits par l'application et correspondent à la section structurée « Sources documentaires ».
 
 ## Installation et vérification locale
 
@@ -110,5 +113,5 @@ La procédure production et la préparation du staging sont détaillées dans `d
 - aucune authentification : bibliothèque globale temporaire ;
 - aucun micro ou Speech-to-Text ;
 - aucune rédaction par paragraphes ;
-- aucune segmentation audio longue ;
-- aucun déploiement automatique du Lot A depuis cette branche.
+- aucun assemblage des segments en un MP3 unique ;
+- aucun déploiement automatique depuis une branche de correctif.
