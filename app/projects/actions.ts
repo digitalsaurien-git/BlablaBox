@@ -4,6 +4,8 @@ import type { DeliveryType } from "@/lib/providers/llm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { ownedProjectWhere } from "@/lib/auth/ownership";
+import { requireCurrentUser } from "@/lib/auth/session";
 import { getLLMProvider } from "@/lib/providers/llm";
 import { getTTSProvider } from "@/lib/providers/tts";
 import { validateTTSScript, toPublicAudioError } from "@/lib/audio-generation";
@@ -46,6 +48,7 @@ function createTitle(sourceContent: string, learningObjective: string): string {
 }
 
 export async function createProject(formData: FormData) {
+  const user = await requireCurrentUser();
   const sourceContent = readString(formData, "sourceContent");
   const learningObjective = readString(formData, "learningObjective");
   const targetDurationMinutes = readDuration(formData);
@@ -75,7 +78,7 @@ export async function createProject(formData: FormData) {
     const project = await prisma.project.create({
       data: {
         title,
-        userId: null,
+        userId: user.id,
         sourceContent,
         targetDurationMinutes,
         deliveryType,
@@ -98,7 +101,7 @@ export async function createProject(formData: FormData) {
     const project = await prisma.project.create({
       data: {
         title,
-        userId: null,
+        userId: user.id,
         sourceContent,
         targetDurationMinutes,
         deliveryType,
@@ -123,10 +126,13 @@ export async function createProject(formData: FormData) {
 }
 
 export async function regenerateProjectScript(formData: FormData) {
+  const user = await requireCurrentUser();
   const projectId = readString(formData, "projectId");
   if (!projectId) redirect("/projects");
 
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  const project = await prisma.project.findFirst({
+    where: ownedProjectWhere(user.id, projectId),
+  });
   if (!project) redirect("/projects");
 
   try {
@@ -140,8 +146,8 @@ export async function regenerateProjectScript(formData: FormData) {
       learningObjective: project.learningObjective,
       deliveryType: project.deliveryType,
     });
-    await prisma.project.update({
-      where: { id: project.id },
+    await prisma.project.updateMany({
+      where: ownedProjectWhere(user.id, project.id),
       data: {
         script: result.script,
         scriptStatus: "SCRIPT_GENERATED",
@@ -152,8 +158,8 @@ export async function regenerateProjectScript(formData: FormData) {
       },
     });
   } catch (error) {
-    await prisma.project.update({
-      where: { id: project.id },
+    await prisma.project.updateMany({
+      where: ownedProjectWhere(user.id, project.id),
       data: {
         scriptStatus: "SCRIPT_FAILED",
         errorMessage:
@@ -168,9 +174,12 @@ export async function regenerateProjectScript(formData: FormData) {
 }
 
 export async function generateProjectAudio(formData: FormData) {
+  const user = await requireCurrentUser();
   const projectId = readString(formData, "projectId");
   if (!projectId) redirect("/projects");
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  const project = await prisma.project.findFirst({
+    where: ownedProjectWhere(user.id, projectId),
+  });
   if (!project) redirect("/projects");
 
   const contentVersion = project.contentVersion;
@@ -179,7 +188,7 @@ export async function generateProjectAudio(formData: FormData) {
     script = validateTTSScript(project.script);
   } catch (error) {
     await prisma.project.updateMany({
-      where: { id: project.id, contentVersion },
+      where: { ...ownedProjectWhere(user.id, project.id), contentVersion },
       data: {
         audioStatus: "FAILED",
         audioErrorMessage: toPublicAudioError(error),
@@ -191,7 +200,7 @@ export async function generateProjectAudio(formData: FormData) {
 
   const claim = await prisma.project.updateMany({
     where: {
-      id: project.id,
+      ...ownedProjectWhere(user.id, project.id),
       contentVersion,
       audioStatus: { not: "PENDING" },
     },
@@ -205,7 +214,11 @@ export async function generateProjectAudio(formData: FormData) {
       provider: getTTSProvider(),
       publish: async ({ manifestFileName, durationSeconds }) => {
         const saved = await prisma.project.updateMany({
-          where: { id: project.id, contentVersion, audioStatus: "PENDING" },
+          where: {
+            ...ownedProjectWhere(user.id, project.id),
+            contentVersion,
+            audioStatus: "PENDING",
+          },
           data: {
             audioStatus: "GENERATED",
             audioContentVersion: contentVersion,
@@ -234,7 +247,7 @@ export async function generateProjectAudio(formData: FormData) {
     }
   } catch (error) {
     await prisma.project.updateMany({
-      where: { id: project.id, contentVersion },
+      where: { ...ownedProjectWhere(user.id, project.id), contentVersion },
       data: {
         audioStatus: "FAILED",
         audioErrorMessage: toPublicAudioError(error),
@@ -247,10 +260,19 @@ export async function generateProjectAudio(formData: FormData) {
 }
 
 export async function deleteProject(formData: FormData) {
+  const user = await requireCurrentUser();
   const projectId = readString(formData, "projectId");
   if (!projectId) redirect("/projects");
 
-  const project = await prisma.project.delete({ where: { id: projectId } });
+  const project = await prisma.project.findFirst({
+    where: ownedProjectWhere(user.id, projectId),
+    select: { id: true, audioFilePath: true },
+  });
+  if (!project) redirect("/projects");
+  const deleted = await prisma.project.deleteMany({
+    where: ownedProjectWhere(user.id, project.id),
+  });
+  if (deleted.count !== 1) redirect("/projects");
   await removeStoredAudio(project.audioFilePath).catch(() => undefined);
   revalidatePath("/projects");
   redirect("/projects");

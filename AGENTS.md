@@ -2,7 +2,7 @@
 
 ## Vision produit
 
-BlablaBox est une application SaaS web mobile-first qui transforme un texte ou un sujet libre en script audio pédagogique clair, vivant et mémorisable. La cible produit future est de produire un fichier audio complet, écoutable, réécoutable et téléchargeable, mais le MVP actuel ne génère pas encore de MP3 réel.
+BlablaBox est une application SaaS web mobile-first qui transforme un texte ou un sujet libre en contenu pédagogique clair, vivant et mémorisable, puis peut produire un audio écoutable et téléchargeable lorsque le TTS est explicitement activé.
 
 ## Stack cible
 
@@ -23,21 +23,22 @@ Fonctionnalités présentes :
 - choix des paramètres pédagogiques ;
 - choix du type de restitution ;
 - génération d'un script via provider LLM ;
-- bibliothèque globale temporaire ;
+- comptes locaux, connexion, déconnexion et bibliothèque isolée par utilisateur ;
 - page détail projet ;
 - affichage de la source complète ;
 - affichage des paramètres, statuts, objectif et script ;
 - régénération du script avec confirmation ;
 - conservation de l'ancien script si la régénération échoue ;
 - suppression simple d'un projet avec confirmation.
+- génération, lecture et téléchargement MP3 lorsque le provider TTS est explicitement activé.
 
 ## Providers existants et prévus
 
 - `LLMProvider` existe.
 - `MockLLMProvider` est le provider par défaut.
 - `OpenAILLMProvider` est préparé côté serveur mais non activé par défaut.
-- `TTSProvider` est prévu plus tard mais non implémenté dans le MVP actuel.
-- Aucun MP3 réel n'existe pour l'instant.
+- `TTSProvider` existe avec un provider désactivé par défaut et un provider OpenAI côté serveur.
+- Les MP3 réels sont stockés hors du répertoire public et servis par une route authentifiée.
 - Aucun provider payant ne doit être activé sans lot validé.
 
 ## Variables d'environnement

@@ -14,6 +14,8 @@ import {
 } from "@/app/projects/actions";
 import { regenerateUnderstandProject } from "@/app/understand/actions";
 import { getStoredAudioPlayback, storedAudioExists } from "@/lib/audio-storage";
+import { ownedProjectWhere } from "@/lib/auth/ownership";
+import { requireCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -23,9 +25,10 @@ type ProjectDetailPageProps = {
 };
 
 export default async function ProjectDetailPage({ params }: ProjectDetailPageProps) {
+  const user = await requireCurrentUser();
   const { id } = await params;
-  const project = await prisma.project.findUnique({
-    where: { id },
+  const project = await prisma.project.findFirst({
+    where: ownedProjectWhere(user.id, id),
     include: { sources: { orderBy: { sourceOrder: "asc" } } },
   });
   if (!project) notFound();

@@ -9,7 +9,9 @@ test("la régénération écrit contenu et sources dans une transaction après s
   assert.ok(providerCall >= 0);
   assert.ok(transaction > providerCall);
   assert.match(source, /contentVersion:\s*\{\s*increment:\s*1\s*\}/);
-  assert.match(source, /sources:\s*\{[\s\S]*deleteMany:\s*\{\}[\s\S]*create:\s*sourceWrites/);
+  assert.match(source, /transaction\.projectSource\.deleteMany/);
+  assert.match(source, /project:\s*\{\s*userId:\s*user\.id\s*\}/);
+  assert.match(source, /transaction\.projectSource\.createMany/);
 });
 
 test("l'échec ne remplace ni script, ni version, ni sources, ni audio", async () => {
@@ -20,6 +22,7 @@ test("l'échec ne remplace ni script, ni version, ni sources, ni audio", async (
   assert.doesNotMatch(failureBlock, /contentVersion:/);
   assert.doesNotMatch(failureBlock, /sources:/);
   assert.doesNotMatch(failureBlock, /audioStatus:/);
+  assert.match(failureBlock, /ownedProjectWhere\(user\.id, project\.id\)/);
 });
 
 test("le versionnement audio protège l'écriture et le lecteur", async () => {
@@ -27,7 +30,7 @@ test("le versionnement audio protège l'écriture et le lecteur", async () => {
   const page = await readFile("app/projects/[id]/page.tsx", "utf8");
   const route = await readFile("app/api/projects/[id]/audio/route.ts", "utf8");
   assert.match(action, /audioContentVersion:\s*contentVersion/);
-  assert.match(action, /where:\s*\{\s*id:\s*project\.id,\s*contentVersion\s*\}/);
+  assert.match(action, /where:\s*\{\s*\.\.\.ownedProjectWhere\(user\.id, project\.id\),\s*contentVersion\s*\}/);
   assert.match(page, /project\.audioContentVersion\s*!==\s*null/);
   assert.match(page, /project\.audioContentVersion\s*===\s*project\.contentVersion/);
   assert.match(page, /storedAudioExists\(project\.audioFilePath\)/);

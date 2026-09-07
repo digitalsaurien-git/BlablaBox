@@ -1,14 +1,19 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { ProjectCard } from "@/components/project-card";
+import { ownedProjectsWhere } from "@/lib/auth/ownership";
+import { requireCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-async function getProjects() {
+async function getProjects(userId: string) {
   try {
     return {
-      projects: await prisma.project.findMany({ orderBy: { createdAt: "desc" } }),
+      projects: await prisma.project.findMany({
+        where: ownedProjectsWhere(userId),
+        orderBy: { createdAt: "desc" },
+      }),
       error: null,
     };
   } catch (error) {
@@ -20,16 +25,15 @@ async function getProjects() {
 }
 
 export default async function ProjectsPage() {
-  const { projects, error } = await getProjects();
+  const user = await requireCurrentUser();
+  const { projects, error } = await getProjects(user.id);
   return (
     <div className="grid gap-6">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <p className="text-sm font-semibold uppercase tracking-wide text-clay">Ma bibliothèque</p>
           <h1 className="mt-2 text-3xl font-bold text-ink">Mes contenus</h1>
-          <p className="mt-2 text-sm text-ink/60">
-            Cette bibliothèque reste globale tant que l&apos;authentification n&apos;est pas activée.
-          </p>
+          <p className="mt-2 text-sm text-ink/60">Les contenus de cette bibliothèque appartiennent uniquement à ton compte.</p>
         </div>
         <Link
           href="/understand/new"

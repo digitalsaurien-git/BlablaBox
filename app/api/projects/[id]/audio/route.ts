@@ -1,5 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/auth/session";
+import { ownedProjectWhere } from "@/lib/auth/ownership";
 import { prisma } from "@/lib/prisma";
 import { getStoredAudioPlayback, resolveStoredAudioPath } from "@/lib/audio-storage";
 
@@ -9,9 +11,13 @@ export const dynamic = "force-dynamic";
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(request: Request, { params }: RouteContext) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Authentification requise." }, { status: 401 });
+  }
   const { id } = await params;
-  const project = await prisma.project.findUnique({
-    where: { id },
+  const project = await prisma.project.findFirst({
+    where: ownedProjectWhere(user.id, id),
     select: {
       id: true,
       contentVersion: true,

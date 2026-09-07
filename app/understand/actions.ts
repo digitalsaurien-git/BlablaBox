@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { ownedProjectWhere } from "@/lib/auth/ownership";
+import { requireCurrentUser } from "@/lib/auth/session";
 import {
   createLearningTitle,
   responseModeToDeliveryType,
@@ -51,6 +53,7 @@ function publicGenerationError(error: unknown): string {
 }
 
 export async function createUnderstandProject(formData: FormData) {
+  const user = await requireCurrentUser();
   const userRequest = readString(formData, "userRequest");
   if (!userRequest) redirect("/understand/new?error=missing-request");
 
@@ -86,7 +89,7 @@ export async function createUnderstandProject(formData: FormData) {
     const project = await prisma.project.create({
       data: {
         title,
-        userId: null,
+        userId: user.id,
         sourceContent: userRequest,
         targetDurationMinutes: responseModeToDuration(responseMode),
         audience,
@@ -115,7 +118,7 @@ export async function createUnderstandProject(formData: FormData) {
     const project = await prisma.project.create({
       data: {
         title,
-        userId: null,
+        userId: user.id,
         sourceContent: userRequest,
         targetDurationMinutes: responseModeToDuration(responseMode),
         audience,
@@ -144,10 +147,13 @@ export async function createUnderstandProject(formData: FormData) {
 }
 
 export async function regenerateUnderstandProject(formData: FormData) {
+  const user = await requireCurrentUser();
   const projectId = readString(formData, "projectId");
   if (!projectId) redirect("/projects");
 
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  const project = await prisma.project.findFirst({
+    where: ownedProjectWhere(user.id, projectId),
+  });
   if (!project || project.projectKind !== "UNDERSTAND_LISTEN") redirect("/projects");
 
   const responseMode = (project.responseMode ?? "EXPLAIN") as ResponseMode;
@@ -167,8 +173,11 @@ export async function regenerateUnderstandProject(formData: FormData) {
     const sources = sanitizeLearningSources(result.sources);
 
     await prisma.$transaction(async (transaction) => {
-      await transaction.project.update({
-        where: { id: project.id },
+      const updated = await transaction.project.updateMany({
+        where: {
+          ...ownedProjectWhere(user.id, project.id),
+          contentVersion: project.contentVersion,
+        },
         data: {
           script: result.content,
           scriptStatus: "SCRIPT_GENERATED",
@@ -178,16 +187,21 @@ export async function regenerateUnderstandProject(formData: FormData) {
           audioStatus: "NOT_GENERATED",
           audioErrorMessage: null,
           errorMessage: null,
-          sources: {
-            deleteMany: {},
-            create: sourceWrites(sources),
-          },
         },
       });
+      if (updated.count !== 1) throw new Error("Le projet a été modifié pendant la génération.");
+      await transaction.projectSource.deleteMany({
+        where: { projectId: project.id, project: { userId: user.id } },
+      });
+      if (sources.length) {
+        await transaction.projectSource.createMany({
+          data: sourceWrites(sources).map((source) => ({ ...source, projectId: project.id })),
+        });
+      }
     });
   } catch (error) {
-    await prisma.project.update({
-      where: { id: project.id },
+    await prisma.project.updateMany({
+      where: ownedProjectWhere(user.id, project.id),
       data: {
         scriptStatus: "SCRIPT_FAILED",
         errorMessage: publicGenerationError(error),

@@ -1,4 +1,5 @@
 import { ProjectForm } from "@/components/project-form";
+import { requireCurrentUser } from "@/lib/auth/session";
 
 type NewProjectPageProps = {
   searchParams: Promise<{
@@ -7,6 +8,7 @@ type NewProjectPageProps = {
 };
 
 export default async function NewProjectPage({ searchParams }: NewProjectPageProps) {
+  await requireCurrentUser();
   const params = await searchParams;
 
   return (

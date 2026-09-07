@@ -36,7 +36,10 @@ test("le lecteur conserve le HTML audio pour 1 MP3 et utilise Web Audio pour 1, 
 
 test("la route audio recherche le projet et retourne 404 sans fichier", async () => {
   const source = await readFile("app/api/projects/[id]/audio/route.ts", "utf8");
-  assert.match(source, /prisma\.project\.findUnique/);
+  assert.match(source, /getCurrentUser/);
+  assert.match(source, /status: 401/);
+  assert.match(source, /prisma\.project\.findFirst/);
+  assert.match(source, /ownedProjectWhere\(user\.id, id\)/);
   assert.match(source, /status: 404/);
   assert.match(source, /getStoredAudioPlayback\(project\.audioFilePath\)/);
   assert.match(source, /resolveStoredAudioPath\(selectedSegment\.fileName\)/);
@@ -46,7 +49,7 @@ test("la route audio recherche le projet et retourne 404 sans fichier", async ()
 test("la publication audio reste conditionnée à la version et nettoie l'obsolète", async () => {
   const actions = await readFile("app/projects/actions.ts", "utf8");
   const orchestration = await readFile("lib/segmented-audio-generation.ts", "utf8");
-  assert.match(actions, /id: project\.id, contentVersion, audioStatus: "PENDING"/);
+  assert.match(actions, /ownedProjectWhere\(user\.id, project\.id\)[\s\S]*contentVersion[\s\S]*audioStatus: "PENDING"/);
   assert.match(actions, /return saved\.count > 0/);
   assert.match(orchestration, /if \(!published\)/);
   assert.match(orchestration, /removeStoredAudio\(manifestFileName\)/);
@@ -55,6 +58,7 @@ test("la publication audio reste conditionnée à la version et nettoie l'obsol�
 
 test("la suppression d'un projet supprime aussi la référence audio stockée", async () => {
   const actions = await readFile("app/projects/actions.ts", "utf8");
-  assert.match(actions, /prisma\.project\.delete\(\{ where: \{ id: projectId \} \}\)/);
+  assert.match(actions, /prisma\.project\.deleteMany/);
+  assert.match(actions, /ownedProjectWhere\(user\.id, project\.id\)/);
   assert.match(actions, /removeStoredAudio\(project\.audioFilePath\)/);
 });

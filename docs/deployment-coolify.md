@@ -88,6 +88,7 @@ NODE_ENV=production
 NEXT_PUBLIC_APP_URL=https://example.com
 PORT=3000
 DATABASE_URL=postgresql://user:password@host:5432/blablabox
+REGISTRATION_ENABLED=false
 LLM_PROVIDER=mock
 LLM_API_KEY=
 LLM_MODEL=gpt-5-mini
@@ -121,7 +122,16 @@ Les secrets doivent rester dans Coolify :
 - `DATABASE_URL` reelle ;
 - future cle `LLM_API_KEY` si un lot valide active un provider reel ;
 - `TTS_API_KEY` lorsque la synthese OpenAI est activee ;
-- futurs secrets d'authentification ou stockage.
+- futurs secrets de stockage.
+
+`REGISTRATION_ENABLED` est lu uniquement côté serveur. En production, une valeur absente,
+invalide ou égale à `false` ferme la création de comptes. L'ouverture nécessite la valeur
+explicite `true` et doit être limitée à la période d'inscription voulue.
+
+La limitation actuelle des connexions est atomique par adresse e-mail normalisée. Un lot
+de durcissement ultérieur devra ajouter une limitation par adresse IP au niveau du proxy
+Coolify, avec configuration explicite des proxies de confiance avant d'utiliser tout
+en-tête d'adresse transmis par le frontal.
 
 ## PostgreSQL
 
@@ -195,9 +205,8 @@ la route applicative apres recherche du projet en base.
 
 La route ne prend jamais de chemin physique en parametre. Elle charge le projet par
 son identifiant, utilise uniquement sa reference de fichier en base et retourne 404
-si le projet ou le fichier est absent. Sans authentification, toute personne connaissant
-l'identifiant du projet peut toutefois demander cette route ; l'isolation utilisateur
-sera ajoutee avec l'authentification.
+si le projet ou le fichier est absent. Après la migration d'authentification, la route
+exige aussi une session valide et vérifie que le projet appartient au compte courant.
 
 ## Healthcheck
 
@@ -223,7 +232,8 @@ Configuration recommandee :
 - application Coolify distincte ;
 - base et utilisateur PostgreSQL distincts ;
 - volume audio distinct monte sur `/data/blablabox-staging/audio` ;
-- acces staging protege tant que l'authentification BlablaBox n'existe pas.
+- acces staging protege tant que la migration d'authentification et les comptes de test
+  ne sont pas opérationnels.
 
 Variables staging attendues :
 
@@ -290,6 +300,7 @@ Ne pas ajouter sans validation explicite :
 
 - [ ] Utiliser Nixpacks / Node.
 - [ ] Renseigner les variables d'environnement.
+- [ ] Garder `REGISTRATION_ENABLED=false`, sauf fenêtre d'inscription explicitement validée.
 - [ ] Configurer le port `3000`.
 - [ ] Configurer la build command : `npx prisma generate && npm run build`.
 - [ ] Configurer la start command : `npm run start`.
@@ -315,4 +326,5 @@ Ne pas ajouter sans validation explicite :
 - Activer `LLM_PROVIDER=openai` sans cle ou sans validation produit peut provoquer des erreurs ou des couts.
 - Sans Auth.js, la bibliotheque reste globale temporairement.
 - Sans volume persistant, les MP3 peuvent disparaitre lors d'un redeploiement.
-- Sans authentification, la route audio n'applique pas encore de controle par utilisateur.
+- La migration d'authentification doit être appliquée avant d'exposer la bibliothèque et
+  la route audio ; celles-ci vérifient ensuite le propriétaire côté serveur.

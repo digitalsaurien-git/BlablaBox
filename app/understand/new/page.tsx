@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { UnderstandForm } from "@/components/understand-form";
+import { requireCurrentUser } from "@/lib/auth/session";
 
 type UnderstandPageProps = {
   searchParams: Promise<{ error?: string }>;
 };
 
 export default async function UnderstandPage({ searchParams }: UnderstandPageProps) {
+  await requireCurrentUser();
   const params = await searchParams;
   return (
     <div className="mx-auto grid max-w-3xl gap-6 pb-8">

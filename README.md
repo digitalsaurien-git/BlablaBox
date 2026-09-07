@@ -16,6 +16,15 @@ Le dépôt contient désormais le parcours **Comprendre & écouter** :
 - lecteur et téléchargement ;
 - bibliothèque compatible avec les anciens projets.
 
+La bibliothèque, les pages projet et les fichiers audio sont protégés par un
+compte local BlablaBox. Les mots de passe sont hachés avec scrypt et les sessions
+opaques sont conservées côté serveur dans PostgreSQL. Les anciens projets sans
+propriétaire ne sont visibles par aucun compte ordinaire.
+
+`User` représente le compte propriétaire, pas un profil d'élève. Un futur modèle
+`StudentProfile` pourra donc appartenir à un compte et être relié aux nouveaux
+contenus sans modifier l'identité de connexion ni partager les ressources entre comptes.
+
 Le parcours **Dicter & rédiger** est affiché comme prochain parcours, mais n'est pas encore implémenté.
 
 ## Stack
@@ -81,6 +90,15 @@ npm test
 npm run build
 ```
 
+Après application de la migration d'authentification, créer un compte depuis
+`/register`, puis se connecter depuis `/login`. Aucun service d'e-mail ni fournisseur
+d'identité externe n'est nécessaire pour ce lot.
+
+En développement et en test, les inscriptions sont ouvertes par défaut. En production,
+elles restent fermées tant que `REGISTRATION_ENABLED=true` n'est pas défini explicitement
+côté serveur. `REGISTRATION_ENABLED=false` permet aussi de les fermer explicitement hors
+production. Cette variable ne doit jamais être préfixée par `NEXT_PUBLIC_`.
+
 Les tests mockent les réponses OpenAI et n'effectuent aucun appel payant.
 
 ## Migrations
@@ -94,6 +112,14 @@ npm run db:migrate:deploy
 ```
 
 Ne jamais utiliser `prisma migrate dev` sur une base distante de production. La migration du Lot A est additive et ne renseigne pas `audioContentVersion` pour les anciens projets.
+
+La migration `20260907120000_add_accounts_and_sessions` est également additive :
+elle ne modifie aucun projet existant et laisse les `userId` historiques inchangés.
+La clé étrangère de propriétaire est validée pendant la migration. Avant de migrer une
+base existante, l'opérateur doit vérifier que tous les projets historiques ont bien un
+`userId` nul ; toute valeur non nulle doit être auditée, jamais corrigée automatiquement.
+La procédure manuelle d'attribution ciblée est décrite dans
+`docs/legacy-project-attribution.md` et ne doit jamais être exécutée en masse.
 
 ## Coolify
 
@@ -110,7 +136,7 @@ La procédure production et la préparation du staging sont détaillées dans `d
 
 ## Limites actuelles
 
-- aucune authentification : bibliothèque globale temporaire ;
+- aucun profil d'élève secondaire : le compte reste l'unique propriétaire des contenus ;
 - aucun micro ou Speech-to-Text ;
 - aucune rédaction par paragraphes ;
 - aucun assemblage des segments en un MP3 unique ;
