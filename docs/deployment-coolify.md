@@ -100,7 +100,15 @@ TTS_VOICE=coral
 TTS_MAX_SCRIPT_CHARACTERS=4096
 TTS_SEGMENT_TARGET_CHARACTERS=3500
 AUDIO_STORAGE_PATH=/data/blablabox/audio
+SOURCE_STORAGE_ROOT=/data/blablabox/sources
 ```
+
+Le parcours Mes cours ajoute un volume persistant privé pour `SOURCE_STORAGE_ROOT`
+(développement seulement : `./storage/sources`). En production, une valeur absolue
+explicite est obligatoire ; aucun repli local silencieux n'est autorisé.
+Ce répertoire ne doit jamais être servi comme un
+répertoire public. Les fichiers source sont publiés avec une clé interne aléatoire
+et téléchargés uniquement par une route authentifiée.
 
 Pour le premier deploiement valide, `LLM_PROVIDER` est reste sur :
 
@@ -189,6 +197,19 @@ AUDIO_STORAGE_PATH=/data/blablabox/audio
 Le processus Node doit avoir les droits de creation, lecture, renommage et suppression
 sur ce dossier. Ne pas monter ce volume dans `public/` : les fichiers sont servis par
 la route applicative apres recherche du projet en base.
+
+Pour Mes cours, monter un volume privé distinct sur `/data/blablabox/sources` et
+configurer `SOURCE_STORAGE_ROOT` sur ce chemin. Le volume doit supporter les liens
+physiques atomiques, être accessible uniquement au processus applicatif, et ne
+contenir aucun lien symbolique ou jonction. Le proxy doit conserver le `Host`
+public : les uploads refusent un `Origin` absent ou différent de ce `Host`.
+Aucun fichier source n'est extrait ou exécuté pendant le Lot 2.
+
+La configuration ne peut pas prouver elle-même qu'un chemin est monté sur un
+volume persistant : vérifier le montage et sa survie après redémarrage lors du lot
+de déploiement dédié. La procédure de réconciliation après incident est décrite
+dans `docs/course-source-storage.md`. Aucun changement Coolify n'est effectué par
+le présent lot.
 
 ## Procedure de mise en production du lot audio
 

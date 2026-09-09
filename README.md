@@ -21,6 +21,15 @@ compte local BlablaBox. Les mots de passe sont hachés avec scrypt et les sessio
 opaques sont conservées côté serveur dans PostgreSQL. Les anciens projets sans
 propriétaire ne sont visibles par aucun compte ordinaire.
 
+Le parcours **Mes cours** conserve les originaux PDF et ODT dans un stockage privé,
+puis permet de les ranger manuellement par année, matière, thème, chapitre facultatif
+et partie. Le Lot 2 ne lit pas encore le contenu des fichiers et ne lance aucun OCR.
+Les signatures et métadonnées ZIP sont vérifiées, sans extraction. Le tri naturel
+est confirmé avec « Trier les repères » ; les repères ne créent aucun chapitre.
+Chaque édition de partie vérifie la version de la liste pour éviter l'écrasement
+par un ancien formulaire. Voir `docs/course-source-storage.md` pour le stockage,
+ses limites et la réconciliation, et `docs/lot2-audit.md` pour les preuves d'audit.
+
 `User` représente le compte propriétaire, pas un profil d'élève. Un futur modèle
 `StudentProfile` pourra donc appartenir à un compte et être relié aux nouveaux
 contenus sans modifier l'identité de connexion ni partager les ressources entre comptes.

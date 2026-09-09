@@ -19,3 +19,4 @@ prisma/dev.db
 
 # Generated audio files are runtime data, never source files.
 storage/audio/
+storage/sources/

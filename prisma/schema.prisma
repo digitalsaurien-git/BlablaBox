@@ -59,6 +59,11 @@ enum ResearchMode {
   REQUIRED
 }
 
+enum CoursePartState {
+  NORMAL
+  DOCUMENT_EXPECTED
+}
+
 model Project {
   id                    String          @id @default(cuid())
   userId                String?
@@ -106,6 +111,14 @@ model User {
   updatedAt    DateTime  @updatedAt
   projects     Project[]
   sessions     Session[]
+  schoolYears  SchoolYear[]
+  subjects     Subject[]
+  courseThemes CourseTheme[]
+  chapters     Chapter[]
+  courseParts  CoursePart[]
+  sourceAssets SourceAsset[]
+  sourceImports SourceImport[]
+  sourcePlacements SourcePlacement[]
 }
 
 model Session {
@@ -143,4 +156,148 @@ model ProjectSource {
 
   @@unique([projectId, sourceOrder])
   @@index([projectId])
+}
+
+model SchoolYear {
+  id        String   @id @default(cuid())
+  userId    String
+  label     String   @db.VarChar(80)
+  startYear Int?
+  endYear   Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  subjects Subject[]
+
+  @@unique([id, userId])
+  @@unique([userId, label])
+  @@index([userId])
+}
+
+model Subject {
+  id           String   @id @default(cuid())
+  userId       String
+  schoolYearId String
+  title        String   @db.VarChar(120)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  schoolYear SchoolYear    @relation(fields: [schoolYearId, userId], references: [id, userId], onDelete: Cascade, onUpdate: Cascade)
+  themes     CourseTheme[]
+
+  @@unique([id, userId])
+  @@unique([userId, schoolYearId, title])
+  @@index([userId, schoolYearId])
+}
+
+model CourseTheme {
+  id        String   @id @default(cuid())
+  userId    String
+  subjectId String
+  title     String   @db.VarChar(160)
+  orderVersion Int   @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  subject  Subject      @relation(fields: [subjectId, userId], references: [id, userId], onDelete: Cascade, onUpdate: Cascade)
+  chapters Chapter[]
+  parts    CoursePart[]
+
+  @@unique([id, userId])
+  @@unique([userId, subjectId, title])
+  @@index([userId, subjectId])
+}
+
+model Chapter {
+  id            String   @id @default(cuid())
+  userId        String
+  courseThemeId String
+  title         String   @db.VarChar(160)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  courseTheme CourseTheme  @relation(fields: [courseThemeId, userId], references: [id, userId], onDelete: Cascade, onUpdate: Cascade)
+  parts       CoursePart[]
+
+  @@unique([id, userId])
+  @@unique([id, userId, courseThemeId])
+  @@unique([userId, courseThemeId, title])
+  @@index([userId, courseThemeId])
+}
+
+model CoursePart {
+  id             String          @id @default(cuid())
+  userId         String
+  courseThemeId  String
+  chapterId      String?
+  title          String          @db.VarChar(180)
+  referenceLabel String?         @db.VarChar(80)
+  sortSegments   Int[]           @default([])
+  position       Int
+  state          CoursePartState @default(NORMAL)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  courseTheme CourseTheme   @relation(fields: [courseThemeId, userId], references: [id, userId], onDelete: Cascade, onUpdate: Cascade)
+  chapter     Chapter?      @relation(fields: [chapterId, userId, courseThemeId], references: [id, userId, courseThemeId], onDelete: NoAction, onUpdate: Cascade)
+  placements SourcePlacement[]
+
+  @@unique([id, userId])
+  @@index([userId, courseThemeId, position])
+  @@index([userId, chapterId])
+}
+
+model SourceAsset {
+  id         String   @id @default(cuid())
+  userId     String
+  sha256     String   @db.Char(64)
+  storageKey String   @unique @db.VarChar(100)
+  mimeType   String   @db.VarChar(100)
+  byteSize   Int
+  createdAt  DateTime @default(now())
+
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  imports    SourceImport[]
+  placements SourcePlacement[]
+
+  @@unique([id, userId])
+  @@unique([userId, sha256])
+  @@index([userId])
+}
+
+model SourceImport {
+  id               String   @id @default(cuid())
+  userId           String
+  sourceAssetId    String
+  originalFileName String   @db.VarChar(255)
+  declaredMimeType String?  @db.VarChar(100)
+  wasDuplicate     Boolean @default(false)
+  createdAt        DateTime @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  sourceAsset SourceAsset @relation(fields: [sourceAssetId, userId], references: [id, userId], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([userId, sourceAssetId])
+  @@index([userId, createdAt])
+}
+
+model SourcePlacement {
+  id            String   @id @default(cuid())
+  userId        String
+  coursePartId  String
+  sourceAssetId String
+  createdAt     DateTime @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  coursePart  CoursePart  @relation(fields: [coursePartId, userId], references: [id, userId], onDelete: Cascade, onUpdate: Cascade)
+  sourceAsset SourceAsset @relation(fields: [sourceAssetId, userId], references: [id, userId], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([coursePartId, sourceAssetId])
+  @@index([userId, coursePartId])
+  @@index([userId, sourceAssetId])
 }
