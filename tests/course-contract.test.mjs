@@ -36,11 +36,14 @@ test("les routes et actions de cours contrôlent la session et le propriétaire"
   assert.match(download, /Cache-Control.*private/);
 });
 
-test("l’import ne déduit ni chapitre ni contenu pédagogique", async () => {
-  const source = await readFile("app/api/sources/route.ts", "utf8");
+test("l’import intelligent reste local et ne crée aucun chapitre implicitement", async () => {
+  const source = await readFile("app/api/courses/analyze/route.ts", "utf8");
+  const mutation = await readFile("lib/courses/smart-import.ts", "utf8");
   assert.match(source, /validateSourceUpload/);
-  assert.match(source, /sourceAsset/);
-  assert.doesNotMatch(source, /getLLMProvider|OCR_PROVIDER|extract/i);
+  assert.match(source, /extractDocumentText/);
+  assert.doesNotMatch(source + mutation, /getLLMProvider|OCR_PROVIDER/);
+  assert.match(mutation, /chapterId:\s*null/);
+  assert.doesNotMatch(mutation, /chapter\.create/);
   const page = await readFile("app/courses/page.tsx", "utf8");
   assert.match(page, /Document encore attendu/);
   assert.match(page, /Trier les repères/);

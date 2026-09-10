@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { importSource, SourceNotFound } from "@/lib/sources/import";
 import { getSourceUploadMaxBytes, validateSourceUpload } from "@/lib/sources/validation";
 import { readBoundedFormData } from "@/lib/sources/request";
+import { hasSameBrowserOrigin } from "@/lib/sources/same-origin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,14 +17,7 @@ function redirectToCourses(params: Record<string, string>): Response {
 export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Authentification requise." }, { status: 401, headers: privateHeaders });
-  // Next can reconstruct request.url with an internal hostname. Compare the
-  // browser Origin to the actual Host; do not trust arbitrary forwarded headers.
-  let sameOrigin = false;
-  try {
-    const origin = new URL(request.headers.get("origin") ?? "");
-    sameOrigin = ["http:", "https:"].includes(origin.protocol) && origin.host === request.headers.get("host");
-  } catch { /* Missing or malformed Origin is refused. */ }
-  if (!sameOrigin) return NextResponse.json({ error: "Origine refusée." }, { status: 403, headers: privateHeaders });
+  if (!hasSameBrowserOrigin(request)) return NextResponse.json({ error: "Origine refusée." }, { status: 403, headers: privateHeaders });
   try {
     const limit = getSourceUploadMaxBytes();
     const formData = await readBoundedFormData(request, limit);
