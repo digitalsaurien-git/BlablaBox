@@ -21,7 +21,7 @@ function formatSegmentError(index: number, cause: unknown): Error {
   return new Error(`La partie audio ${index + 1} est indisponible.${detail}`);
 }
 
-export function ContinuousAudioPlayer({ sources }: { sources: string[] }) {
+export function ContinuousAudioPlayer({ sources, simple = false }: { sources: string[]; simple?: boolean }) {
   const segmented = sources.length > 1;
   const sourceKey = sources.join("\n");
   const sourceListRef = useRef(sources);
@@ -271,7 +271,7 @@ export function ContinuousAudioPlayer({ sources }: { sources: string[] }) {
           Votre navigateur ne prend pas en charge la lecture audio.
         </audio>
         <a
-          href={`${sources[0]}?download=1`}
+          href={`${sources[0]}${sources[0].includes('?') ? '&' : '?'}download=1`}
           className="inline-flex w-fit items-center justify-center rounded-xl border border-ink/15 bg-paper px-4 py-2.5 text-sm font-semibold text-ink transition hover:border-moss hover:text-moss"
         >
           Télécharger le MP3
@@ -298,7 +298,7 @@ export function ContinuousAudioPlayer({ sources }: { sources: string[] }) {
         {buttonLabel}
       </button>
       <p className="text-sm text-ink/60" aria-live="polite">
-        {isLoading ? "Préparation des segments audio…" : "Les segments sont décodés puis programmés dans l’ordre."}
+        {isLoading ? "Préparation de l’écoute…" : simple ? "Écoute à ton rythme." : "Les segments sont décodés puis programmés dans l’ordre."}
       </p>
       {playbackError ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="alert">
@@ -307,7 +307,7 @@ export function ContinuousAudioPlayer({ sources }: { sources: string[] }) {
       ) : null}
       <div className="grid gap-2">
         <p className="text-sm leading-6 text-ink/60">
-          Le téléchargement reste composé de {sources.length} MP3 ordonnés. Aucune concaténation MP3 fragile n&apos;est effectuée.
+          {simple ? 'Tu peux aussi télécharger les parties à écouter.' : <>Le téléchargement reste composé de {sources.length} MP3 ordonnés. Aucune concaténation MP3 fragile n&apos;est effectuée.</>}
         </p>
         <div className="flex flex-wrap gap-2">
           {sources.map((source, index) => (

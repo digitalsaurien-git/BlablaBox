@@ -19,6 +19,7 @@ export class OpenAITTSProvider implements TTSProvider {
 
     const response = await fetch("https://api.openai.com/v1/audio/speech", {
       method: "POST",
+      signal: AbortSignal.timeout(45_000),
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
         "Content-Type": "application/json",
@@ -36,7 +37,7 @@ export class OpenAITTSProvider implements TTSProvider {
     }
 
     const audio = Buffer.from(await response.arrayBuffer());
-    if (audio.length === 0) {
+    if (audio.length === 0 || audio.length > 15 * 1024 * 1024) {
       throw new Error("Le provider OpenAI a renvoyé un fichier audio vide.");
     }
 

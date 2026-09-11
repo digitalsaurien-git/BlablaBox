@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { SmartCourseImport } from "@/components/smart-course-import";
 import { requireCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
@@ -61,13 +62,15 @@ export default async function CoursesPage({ searchParams }: PageProps) {
         <h3 className="text-lg font-bold text-moss">{subject.title}<span className="ml-2 text-sm font-normal text-ink/50">{year.label}</span></h3>
         <div className="grid min-w-0 gap-3 sm:grid-cols-2">{subject.themes.map((course) => {
           const count = course.parts.reduce((total, part) => total + part.placements.length, 0);
-          return <details key={course.id} className="min-w-0 rounded-2xl border border-ink/10 bg-white p-4 shadow-sm open:sm:col-span-2">
-            <summary className="cursor-pointer list-none"><h4 className="break-words text-lg font-semibold text-ink">{course.title}</h4><p className="text-sm text-ink/60">{count} document{count === 1 ? "" : "s"}</p></summary>
+          return <article key={course.id} className="min-w-0 rounded-2xl border border-ink/10 bg-white p-4 shadow-sm">
+            <h4 className="break-words text-lg font-semibold text-ink">{course.title}</h4><p className="text-sm text-ink/60">{count} document{count === 1 ? "" : "s"}</p>
+            <Link href={`/courses/${course.id}`} className="mt-4 inline-flex min-h-12 items-center rounded-xl bg-moss px-5 py-3 font-semibold text-white">Ouvrir ce cours</Link>
+            <details className="mt-4"><summary className="cursor-pointer text-sm">Documents du cours</summary>
             <ol className="mt-4 grid min-w-0 gap-3 border-t border-ink/10 pt-4">{course.parts.map((part) => <li key={part.id} className="min-w-0 rounded-xl bg-paper p-3">
               <p className="font-semibold">{part.referenceLabel ? part.referenceLabel + " — " : ""}{part.title}</p>
               {part.placements.length ? <ul className="mt-2 grid gap-1 text-sm">{part.placements.map((placement) => <li key={placement.id}><a className="break-all text-moss underline" href={"/api/sources/" + placement.sourceAsset.id + "/download"}>{placement.sourceAsset.imports[0]?.originalFileName ?? "Document source"}</a></li>)}</ul> : <p className="mt-1 text-sm text-ink/55">{part.state === "DOCUMENT_EXPECTED" ? "Document encore attendu" : "Aucun document rattaché"}</p>}
             </li>)}</ol>
-          </details>;
+          </details></article>;
         })}</div>
       </div>))}
       {years.every((year) => year.subjects.every((subject) => !subject.themes.length)) ? <p className="rounded-2xl border border-dashed border-ink/20 bg-white p-8 text-center text-ink/65">Ton premier cours apparaîtra ici après son ajout.</p> : null}

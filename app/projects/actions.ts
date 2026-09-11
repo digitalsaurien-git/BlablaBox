@@ -134,6 +134,7 @@ export async function regenerateProjectScript(formData: FormData) {
     where: ownedProjectWhere(user.id, projectId),
   });
   if (!project) redirect("/projects");
+  if (project.projectKind === "COURSE_LEARNING") redirect(`/courses/${project.courseThemeId}`);
 
   try {
     const result = await getLLMProvider().generateAudioScript({
@@ -181,6 +182,7 @@ export async function generateProjectAudio(formData: FormData) {
     where: ownedProjectWhere(user.id, projectId),
   });
   if (!project) redirect("/projects");
+  if (project.projectKind === "COURSE_LEARNING") redirect(`/courses/${project.courseThemeId}`);
 
   const contentVersion = project.contentVersion;
   let script: string;

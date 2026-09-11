@@ -31,6 +31,7 @@ enum ProjectKind {
   LEGACY_AUDIO
   UNDERSTAND_LISTEN
   DICTATE_WRITE
+  COURSE_LEARNING
 }
 
 enum ResponseMode {
@@ -98,7 +99,11 @@ model Project {
   updatedAt             DateTime        @updatedAt
   sources               ProjectSource[]
   user                  User?           @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  courseThemeId         String?
+  courseTheme           CourseTheme?    @relation(fields: [courseThemeId, userId], references: [id, userId], onDelete: NoAction)
+  learningVersions      ProjectVersion[]
 
+  @@unique([id, userId])
   @@index([userId])
   @@index([createdAt])
 }
@@ -119,6 +124,13 @@ model User {
   sourceAssets SourceAsset[]
   sourceImports SourceImport[]
   sourcePlacements SourcePlacement[]
+  extractions SourceExtraction[]
+  passages SourcePassage[]
+  learningVersions ProjectVersion[]
+  passageCitations PassageCitation[]
+  learningSessions LearningSession[]
+  learningAttempts LearningAttempt[]
+  providerUsage ProviderUsage[]
 }
 
 model Session {
@@ -205,6 +217,9 @@ model CourseTheme {
   subject  Subject      @relation(fields: [subjectId, userId], references: [id, userId], onDelete: Cascade, onUpdate: Cascade)
   chapters Chapter[]
   parts    CoursePart[]
+  projects Project[]
+  learningVersions ProjectVersion[]
+  learningSessions LearningSession[]
 
   @@unique([id, userId])
   @@unique([userId, subjectId, title])
@@ -264,6 +279,7 @@ model SourceAsset {
   user       User              @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   imports    SourceImport[]
   placements SourcePlacement[]
+  extractions SourceExtraction[]
 
   @@unique([id, userId])
   @@unique([userId, sha256])
@@ -300,4 +316,125 @@ model SourcePlacement {
   @@unique([coursePartId, sourceAssetId])
   @@index([userId, coursePartId])
   @@index([userId, sourceAssetId])
+}
+
+// Immutable extraction of one PDF page or ODT text/image unit.
+model SourceExtraction {
+  id String @id @default(cuid())
+  userId String
+  sourceAssetId String
+  unitKey String @db.VarChar(100)
+  inputHash String @db.Char(64)
+  extractorVersion String @db.VarChar(80)
+  method String @db.VarChar(20)
+  quality String @db.VarChar(20)
+  text String @db.Text
+  consentAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceAsset SourceAsset @relation(fields: [sourceAssetId, userId], references: [id, userId], onDelete: Cascade)
+  passages SourcePassage[]
+  @@unique([id, userId])
+  @@unique([userId, sourceAssetId, unitKey, inputHash, extractorVersion, method])
+}
+
+model SourcePassage {
+  id String @id @default(cuid())
+  userId String
+  extractionId String
+  position Int
+  start Int
+  end Int
+  text String @db.Text
+  quality String @db.VarChar(20)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  extraction SourceExtraction @relation(fields: [extractionId, userId], references: [id, userId], onDelete: Cascade)
+  citations PassageCitation[]
+  @@unique([id, userId])
+  @@unique([extractionId, position])
+}
+
+model ProjectVersion {
+  id String @id @default(cuid())
+  userId String
+  projectId String
+  courseThemeId String
+  version Int
+  mode String @db.VarChar(30)
+  sourceFingerprint String @db.Char(64)
+  cacheKey String @db.Char(64)
+  content Json
+  audio Json @default("{}")
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId, userId], references: [id, userId], onDelete: Cascade)
+  courseTheme CourseTheme @relation(fields: [courseThemeId, userId], references: [id, userId], onDelete: Cascade)
+  citations PassageCitation[]
+  sessions LearningSession[]
+  @@unique([id, userId])
+  @@unique([projectId, version])
+  @@unique([userId, cacheKey])
+}
+
+model PassageCitation {
+  id String @id @default(cuid())
+  userId String
+  projectVersionId String
+  passageId String
+  elementKey String @db.VarChar(100)
+  quote String @db.Text
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectVersion ProjectVersion @relation(fields: [projectVersionId, userId], references: [id, userId], onDelete: Cascade)
+  passage SourcePassage @relation(fields: [passageId, userId], references: [id, userId], onDelete: NoAction)
+  @@unique([projectVersionId, elementKey, passageId])
+}
+
+model LearningSession {
+  id String @id @default(cuid())
+  userId String
+  courseThemeId String
+  projectVersionId String
+  kind String @db.VarChar(20)
+  instruction String? @db.Text
+  position Int @default(0)
+  correctionRequested Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseTheme CourseTheme @relation(fields: [courseThemeId, userId], references: [id, userId], onDelete: Cascade)
+  projectVersion ProjectVersion @relation(fields: [projectVersionId, userId], references: [id, userId], onDelete: Cascade)
+  attempts LearningAttempt[]
+  @@unique([id, userId])
+}
+
+model LearningAttempt {
+  id String @id @default(cuid())
+  userId String
+  sessionId String
+  questionIndex Int
+  answer String @db.Text
+  feedback String @db.Text
+  correct Boolean?
+  hintsUsed Int @default(0)
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session LearningSession @relation(fields: [sessionId, userId], references: [id, userId], onDelete: Cascade)
+  @@index([userId, sessionId, questionIndex])
+}
+
+// Allowlisted technical metadata only: never prompts, outputs, files or error bodies.
+model ProviderUsage {
+  id String @id @default(cuid())
+  userId String
+  operationKey String @db.Char(64)
+  provider String @db.VarChar(30)
+  operation String @db.VarChar(30)
+  status String @db.VarChar(20)
+  inputTokens Int?
+  outputTokens Int?
+  units Int @default(1)
+  durationMs Int?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, operationKey])
 }

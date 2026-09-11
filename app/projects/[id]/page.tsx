@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { DeleteProjectButton } from "@/components/delete-project-button";
 import { ProjectMetaPanel } from "@/components/project-meta-panel";
 import { ProjectSources } from "@/components/project-sources";
@@ -32,6 +32,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
     include: { sources: { orderBy: { sourceOrder: "asc" } } },
   });
   if (!project) notFound();
+  if (project.projectKind === "COURSE_LEARNING" && project.courseThemeId) redirect(`/courses/${project.courseThemeId}`);
 
   const isUnderstand = project.projectKind === "UNDERSTAND_LISTEN";
   const hasError = project.scriptStatus === "SCRIPT_FAILED" || Boolean(project.errorMessage);
