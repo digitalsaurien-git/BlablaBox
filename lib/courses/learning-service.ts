@@ -8,6 +8,9 @@ import { gradeQuestion, insufficient, learningSchema, type LearningMode, type Pa
 import { generateSegmentedStoredAudio } from '../segmented-audio-generation.ts';
 import { storedAudioExists } from '../audio-storage.ts';
 import { getTTSProvider } from '../providers/tts/index.ts';
+import type { LearningTrace } from './learning-trace.ts';
+
+export const COURSE_READING_REQUIRED='Aucun passage vérifié n’est encore disponible pour travailler ce cours.';
 
 export const digest=(value:string)=>createHash('sha256').update(value).digest('hex');
 const json=(value:unknown)=>JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -73,7 +76,7 @@ async function claim(db:PrismaClient,userId:string,operationKey:string,provider:
     return db.providerUsage.findUniqueOrThrow({where:{userId_operationKey:{userId,operationKey}}});
   }
 }
-async function complete(db:PrismaClient,id:string,started:number,usage:Usage={},status='DONE') {
+async function complete(db:Pick<PrismaClient,'providerUsage'>,id:string,started:number,usage:Usage={},status='DONE') {
   const safeCount=(n:unknown)=>Number.isSafeInteger(n)&&Number(n)>=0&&Number(n)<2147483647?Number(n):null;
   await db.providerUsage.update({where:{id},data:{status,durationMs:Math.min(Date.now()-started,2147483647),inputTokens:safeCount(usage.inputTokens),outputTokens:safeCount(usage.outputTokens)}});
 }
@@ -87,13 +90,21 @@ export async function analyzeCourse(db:PrismaClient,userId:string,courseId:strin
   for(const asset of assets) {
     const selected=asset.extractions.filter(e=>consentedIds.includes(e.id));
     if(asset.extractions.some(e=>e.extractorVersion===EXTRACTOR) && !selected.length)continue;
-    const units=await readLearningDocument(await readSourceFile(asset.storageKey),asset.mimeType);
-    // Publish all locally extracted units together. A crash must not leave a
-    // partial document that a later analysis would mistake for a complete cache.
-    await db.$transaction(units.map(unit=>{
-      const quality=unit.needsVision?'needs-vision':unit.text.trim().length>=40?'verified':'uncertain';
-      return db.sourceExtraction.upsert({where:{userId_sourceAssetId_unitKey_inputHash_extractorVersion_method:{userId,sourceAssetId:asset.id,unitKey:unit.key,inputHash:unit.hash,extractorVersion:EXTRACTOR,method:'native'}},update:{},create:{userId,sourceAssetId:asset.id,unitKey:unit.key,inputHash:unit.hash,extractorVersion:EXTRACTOR,method:'native',quality,text:unit.text,passages:{create:splitPassages(unit.text).map(p=>({...p,quality:quality==='verified'?'verified':'uncertain'}))}}});
-    }));
+    // Serialize the bounded native reader across processes. Contending clicks
+    // get a recoverable message, never another extraction or an automatic retry.
+    const units=await db.$transaction(async tx=>{
+      const [lock]=await tx.$queryRaw<Array<{acquired:boolean}>>`SELECT pg_try_advisory_xact_lock(hashtextextended(${`course-reading:${userId}:${asset.id}`},0)) AS acquired`;
+      if(!lock.acquired)throw new Error('La lecture est déjà en cours. Réessaie dans un instant.');
+      const cached=await tx.sourceExtraction.findFirst({where:{userId,sourceAssetId:asset.id,extractorVersion:EXTRACTOR,method:'native'}});
+      if(cached && !selected.length)return [];
+      const read=await readLearningDocument(await readSourceFile(asset.storageKey),asset.mimeType);
+      // Publish the entire document atomically; no partial extraction cache.
+      if(!cached)for(const unit of read) {
+        const quality=unit.needsVision?'needs-vision':unit.text.trim().length>=40?'verified':'uncertain';
+        await tx.sourceExtraction.create({data:{userId,sourceAssetId:asset.id,unitKey:unit.key,inputHash:unit.hash,extractorVersion:EXTRACTOR,method:'native',quality,text:unit.text,passages:{create:splitPassages(unit.text).map(p=>({...p,quality:quality==='verified'?'verified':'uncertain'}))}}});
+      }
+      return read;
+    },{timeout:40_000,maxWait:5_000});
     for(const unit of units) {
       const existing=asset.extractions.find(e=>e.unitKey===unit.key && e.inputHash===unit.hash && e.extractorVersion===EXTRACTOR);
       if(!unit.image || !existing || !selected.some(e=>e.id===existing.id)) continue;
@@ -122,21 +133,25 @@ export async function reviewExtraction(db:PrismaClient,userId:string,courseId:st
   return db.sourceExtraction.create({data:{userId,sourceAssetId:source.sourceAssetId,unitKey:source.unitKey,inputHash:source.inputHash,extractorVersion:`review-${randomUUID()}`,method:'reviewed',quality:'verified',text,passages:{create:splitPassages(text).map(p=>({...p,quality:'verified'}))}}});
 }
 
-export async function prepareLearning(db:PrismaClient,userId:string,courseId:string,mode:LearningMode,minutes:5|10,instruction='') {
-  const course=await ownedCourse(db,userId,courseId);
-  const snapshot=passageSnapshot(course);
-  if(!snapshot.passages.length)throw new Error('Analyse d’abord ce cours.');
+export async function prepareLearning(db:PrismaClient,userId:string,courseId:string,mode:LearningMode,minutes:5|10,instruction='',trace?:LearningTrace) {
+  let course=await ownedCourse(db,userId,courseId);
+  let snapshot=passageSnapshot(course);
   if(mode==='homework' && (!instruction.trim() || instruction.length>3000))throw new Error('Écris une consigne de 3 000 caractères maximum.');
+  if(!snapshot.passages.some(p=>p.quality==='verified')) {
+    await analyzeCourse(db,userId,courseId); // Local only: never passes OCR consent.
+    course=await ownedCourse(db,userId,courseId);snapshot=passageSnapshot(course);
+  }
   const evaluation=['quiz','gap','order','mix','homework'].includes(mode);
-  const passages=snapshot.passages.filter(p=>!evaluation || p.quality==='verified');
-  if(!passages.length)throw new Error('Vérifie d’abord les passages reconnus dans les images avant de les utiliser pour un exercice.');
+  const passages=snapshot.passages.filter(p=>p.quality==='verified');
+  if(!passages.length)throw new Error(COURSE_READING_REQUIRED);
   if(passages.reduce((n,p)=>n+p.text.length,0)>60000)throw new Error('Ce cours dépasse la limite de préparation de 60 000 caractères.');
   const key=digest(JSON.stringify([courseId,snapshot.fingerprint,mode,minutes,instruction,process.env.LLM_PROVIDER ?? 'mock',process.env.LLM_MODEL ?? 'gpt-5-mini','learning-v1']));
   let version=await db.projectVersion.findUnique({where:{userId_cacheKey:{userId,cacheKey:key}}});
   if(!version) {
     const operation=await claim(db,userId,key,process.env.LLM_PROVIDER ?? 'mock','learning');const started=Date.now();
     try {
-      const result=await generateCourse({mode,minutes,instruction,passages});
+      const result=await generateCourse({mode,minutes,instruction,passages},trace);
+      trace?.event('transaction-start');
       version=await db.$transaction(async tx=>{
         const project=await tx.project.create({data:{userId,courseThemeId:courseId,title:course.title,sourceContent:passages.map(p=>p.text).join('\n\n'),targetDurationMinutes:minutes,audience:'10-12 ans',tone:'Clair',level:'Simple',learningObjective:'Travailler ce cours',projectKind:'COURSE_LEARNING',researchMode:'NONE',researchUsed:false,script:result.data.blocks.map(b=>b.text).join('\n\n'),scriptStatus:'SCRIPT_GENERATED'}});
         const created=await tx.projectVersion.create({data:{userId,projectId:project.id,courseThemeId:courseId,version:1,mode,sourceFingerprint:snapshot.fingerprint,cacheKey:key,content:json(result.data)}});
@@ -153,10 +168,9 @@ export async function prepareLearning(db:PrismaClient,userId:string,courseId:str
         // Foreign passage IDs cannot survive either this check or the composite FK.
         if(citations.some(c=>!passages.some(p=>p.id===c.passageId && p.text.includes(c.quote))))throw new Error(insufficient);
         await tx.passageCitation.createMany({data:citations.map(c=>({...c,userId,projectVersionId:created.id}))});
-        await tx.providerUsage.update({where:{id:operation.id},data:{status:'DONE',durationMs:Date.now()-started}});
+        await complete(tx,operation.id,started,result.usage);
         return created;
       });
-      await complete(db,operation.id,started,result.usage);
     } catch(error) {await complete(db,operation.id,started,{},'FAILED');throw error;}
   }
   if(evaluation) {

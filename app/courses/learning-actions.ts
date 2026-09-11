@@ -4,13 +4,15 @@ import { revalidatePath } from 'next/cache';
 import { requireCurrentUser } from '@/lib/auth/session';
 import { prisma } from '@/lib/prisma';
 import { MODES, type LearningMode } from '@/lib/courses/learning-contract';
-import { advanceSession, analyzeCourse, answerSession, prepareAudio, prepareLearning, requestCorrection, reviewExtraction } from '@/lib/courses/learning-service';
+import { advanceSession, analyzeCourse, answerSession, COURSE_READING_REQUIRED, prepareAudio, prepareLearning, requestCorrection, reviewExtraction } from '@/lib/courses/learning-service';
 import { LLM_TIMEOUT_MESSAGE } from '@/lib/providers/llm/course-provider';
+import { createLearningTrace } from '@/lib/courses/learning-trace';
 const field=(f:FormData,k:string)=>typeof f.get(k)==='string'?String(f.get(k)):'';
 const coursePath=(id:string)=>`/courses/${encodeURIComponent(id)}`;
 function code(error:unknown) {
   const message=error instanceof Error?error.message:'';
   if(message===LLM_TIMEOUT_MESSAGE)return 'timeout';
+  if(message===COURSE_READING_REQUIRED)return 'reading';
   if(/vérifi|étayer|ambigu|possible|limite|dépasse|entièrem/.test(message))return 'source';
   if(/configur/.test(message))return 'provider';
   if(/déjà|interrompue/.test(message))return 'pending';
@@ -20,15 +22,20 @@ export async function analyzeLearningCourse(form:FormData) {
   const user=await requireCurrentUser();const id=field(form,'courseId');
   const consent=form.get('consent')==='yes';
   const ids=consent?form.getAll('page').filter((v):v is string=>typeof v==='string'):[];
-  try {await analyzeCourse(prisma,user.id,id,ids);}catch(error){redirect(`${coursePath(id)}?error=${code(error)}`);}
+  if(!consent||!ids.length)redirect(`${coursePath(id)}?readingError=consent#course-reading`);
+  try {await analyzeCourse(prisma,user.id,id,ids);}catch(error){redirect(`${coursePath(id)}?readingError=${code(error)}#course-reading`);}
   revalidatePath(coursePath(id));redirect(coursePath(id));
 }
 export async function startCourseLearning(form:FormData) {
+  const trace=createLearningTrace();trace.event('action-start');
   const user=await requireCurrentUser();const id=field(form,'courseId');const mode=field(form,'mode');
   if(!MODES.includes(mode as LearningMode))redirect(coursePath(id));
+  const minutes=form.get('minutes')==='10'?10:5;
+  const path=mode==='homework'?'homework':['quiz','gap','order','mix'].includes(mode)?'revise':'understand';
   let result;
-  try {result=await prepareLearning(prisma,user.id,id,mode as LearningMode,form.get('minutes')==='10'?10:5,field(form,'instruction'));}
-  catch(error){redirect(`${coursePath(id)}?error=${code(error)}`);}
+  try {result=await prepareLearning(prisma,user.id,id,mode as LearningMode,minutes,field(form,'instruction'),trace);}
+  catch(error){trace.failed(error);revalidatePath(coursePath(id));redirect(`${coursePath(id)}/${path}?error=${code(error)}${path==='revise'?`&minutes=${minutes}`:''}`);}
+  trace.event('done');
   revalidatePath(coursePath(id));
   redirect(result.sessionId?`${coursePath(id)}/session/${result.sessionId}`:`${coursePath(id)}/content/${result.versionId}`);
 }
@@ -53,7 +60,7 @@ export async function showHomeworkCorrection(form:FormData) {
 export async function confirmCourseReading(form:FormData) {
   const user=await requireCurrentUser();const id=field(form,'courseId');
   if(form.get('confirmed')!=='yes')redirect(coursePath(id));
-  try {await reviewExtraction(prisma,user.id,id,field(form,'extractionId'),field(form,'text'));}catch(error){redirect(`${coursePath(id)}?error=${code(error)}`);}
+  try {await reviewExtraction(prisma,user.id,id,field(form,'extractionId'),field(form,'text'));}catch(error){redirect(`${coursePath(id)}/reading/${encodeURIComponent(field(form,'extractionId'))}?error=${code(error)}`);}
   revalidatePath(coursePath(id));redirect(coursePath(id));
 }
 export async function createLearningAudio(form:FormData) {

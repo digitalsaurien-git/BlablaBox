@@ -10,6 +10,8 @@ export async function readLearningDocument(bytes:Uint8Array, mime:string):Promis
     const timer = setTimeout(() => {void worker.terminate();reject(new Error('La lecture du document a dépassé le délai autorisé.'));},30000);
     worker.once('message',(result:{units?:DocumentUnit[];error?:string})=>{clearTimeout(timer);void worker.terminate();if(result.units)resolve(result.units);else reject(new Error(result.error ?? 'Lecture impossible.'));});
     worker.once('error',()=>{clearTimeout(timer);reject(new Error('Lecture locale indisponible.'));});
-    worker.once('exit',code=>{clearTimeout(timer);if(code!==0)reject(new Error('Lecture interrompue.'));});
+    // Even a clean exit without a message must settle the promise. Rejecting
+    // after the message resolved it is harmless; clearing the timer alone is not.
+    worker.once('exit',()=>{clearTimeout(timer);reject(new Error('Lecture interrompue.'));});
   });} finally {activeReaders--;}
 }
