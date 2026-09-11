@@ -5,10 +5,12 @@ import { requireCurrentUser } from '@/lib/auth/session';
 import { prisma } from '@/lib/prisma';
 import { MODES, type LearningMode } from '@/lib/courses/learning-contract';
 import { advanceSession, analyzeCourse, answerSession, prepareAudio, prepareLearning, requestCorrection, reviewExtraction } from '@/lib/courses/learning-service';
+import { LLM_TIMEOUT_MESSAGE } from '@/lib/providers/llm/course-provider';
 const field=(f:FormData,k:string)=>typeof f.get(k)==='string'?String(f.get(k)):'';
 const coursePath=(id:string)=>`/courses/${encodeURIComponent(id)}`;
 function code(error:unknown) {
   const message=error instanceof Error?error.message:'';
+  if(message===LLM_TIMEOUT_MESSAGE)return 'timeout';
   if(/vérifi|étayer|ambigu|possible|limite|dépasse|entièrem/.test(message))return 'source';
   if(/configur/.test(message))return 'provider';
   if(/déjà|interrompue/.test(message))return 'pending';

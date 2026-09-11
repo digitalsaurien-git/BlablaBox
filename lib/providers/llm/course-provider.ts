@@ -3,14 +3,36 @@ import { learningSchema, validateGroundedOutput, type LearningMode, type Learnin
 
 export type CourseInput = {mode:LearningMode;passages:Passage[];instruction?:string;minutes:5|10};
 export type Usage = {inputTokens?:number;outputTokens?:number};
+export const LLM_TIMEOUT_MESSAGE='Le service de préparation a dépassé le délai autorisé.';
+const DEFAULT_LLM_REQUEST_TIMEOUT_MS=120_000;
+const MIN_LLM_REQUEST_TIMEOUT_MS=5_000;
+const MAX_LLM_REQUEST_TIMEOUT_MS=300_000;
+
+export function getLLMRequestTimeoutMs(value=process.env.LLM_REQUEST_TIMEOUT_MS):number {
+  const parsed=Number(value);
+  return Number.isSafeInteger(parsed)&&parsed>=MIN_LLM_REQUEST_TIMEOUT_MS&&parsed<=MAX_LLM_REQUEST_TIMEOUT_MS?parsed:DEFAULT_LLM_REQUEST_TIMEOUT_MS;
+}
+
+function timedOut(error:unknown,signal:AbortSignal):boolean {
+  const name=error instanceof Error?error.name:'';
+  const reason=signal.reason;
+  return name==='TimeoutError'||(name==='AbortError'&&reason instanceof Error&&reason.name==='TimeoutError');
+}
 
 export async function structuredResponse(apiKey:string, model:string, instructions:string, input:unknown, schema:Record<string,unknown>, signal?:AbortSignal):Promise<{data:unknown;usage:Usage}> {
   if(!apiKey) throw new Error('Le service n’est pas configuré.');
-  const response=await fetch('https://api.openai.com/v1/responses',{
-    method:'POST',headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
-    signal:signal ?? AbortSignal.timeout(45000),
-    body:JSON.stringify({model,store:false,instructions,input,max_output_tokens:6500,text:{format:{type:'json_schema',name:'course_result',strict:true,schema}}}),
-  });
+  const requestSignal=signal ?? AbortSignal.timeout(getLLMRequestTimeoutMs());
+  let response:Response;
+  try {
+    response=await fetch('https://api.openai.com/v1/responses',{
+      method:'POST',headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
+      signal:requestSignal,
+      body:JSON.stringify({model,store:false,instructions,input,max_output_tokens:6500,text:{format:{type:'json_schema',name:'course_result',strict:true,schema}}}),
+    });
+  } catch(error) {
+    if(timedOut(error,requestSignal))throw new Error(LLM_TIMEOUT_MESSAGE);
+    throw error;
+  }
   if(!response.ok) throw new Error('Le service est momentanément indisponible.');
   const body=await response.json();
   if(body.status==='incomplete') throw new Error('La réponse est incomplète.');
