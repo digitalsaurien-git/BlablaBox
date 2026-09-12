@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { LearningFailure } from './learning-errors.ts';
 export const citationSchema = z.object({passageId:z.string().min(1),quote:z.string().min(1).max(2000)}).strict();
 const refs = z.array(citationSchema).min(1).max(8);
-export const block = z.object({text:z.string().min(1).max(1200),kind:z.enum(['explanation','example']),citations:refs}).strict();
+export const block = z.object({title:z.string().min(1).max(60).optional(),text:z.string().min(1).max(1200),kind:z.enum(['explanation','example']),citations:refs}).strict();
 export const question = z.object({
   type:z.enum(['mcq','boolean','gap','order','association']),
   prompt:z.string().min(1).max(600),choices:z.array(z.string().max(300)).max(8),
@@ -43,9 +43,13 @@ export function validateGroundedOutput(raw:unknown, passages:Passage[], mode:Lea
     const numbers: string[] = text.match(/\d+(?:[.,]\d+)?/g) ?? [];
     const sourceNumbers: string[] = evidence.match(/\d+(?:[.,]\d+)?/g) ?? [];
     if(numbers.some(n=>!sourceNumbers.includes(n)))throw new LearningFailure('UNVERIFIABLE_NUMBER');
+    const unitPattern=/\b\d+(?:[.,]\d+)?\s*(?:Ma|Ga|ka|millions?\s+d['’]années?|milliers?\s+d['’]années?|ans?|s(?:econdes?)?|min(?:utes?)?|h(?:eures?)?|km|m|cm|mm|kg|g|%|°C)\b/giu;
+    const measures=[...text.matchAll(unitPattern)].map(match=>normalizeAnswer(match[0]));
+    const sourceMeasures=new Set([...evidence.matchAll(unitPattern)].map(match=>normalizeAnswer(match[0])));
+    if(measures.some(measure=>!sourceMeasures.has(measure)))throw new LearningFailure('UNVERIFIABLE_NUMBER');
     if(/https?:\/\/|<\/?(?:script|iframe)|storageKey|DATABASE_URL/i.test(text))throw new LearningFailure('INVALID_STRUCTURE');
   }
-  for(const b of result.blocks) verify(b.text,b.citations);
+  for(const b of result.blocks) verify([b.title,b.text].filter(Boolean).join(' '),b.citations);
   for(const q of result.questions) {
     verify([q.prompt,q.explanation,...q.choices,...q.expected,...q.variants].join(' '),q.citations,true);
     const quotes = q.citations.map(c=>normalizeAnswer(c.quote)).join(' ');

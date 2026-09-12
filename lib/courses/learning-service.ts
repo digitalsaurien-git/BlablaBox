@@ -10,7 +10,7 @@ import { storedAudioExists } from '../audio-storage.ts';
 import { getTTSProvider } from '../providers/tts/index.ts';
 import type { LearningTrace } from './learning-trace.ts';
 import { LearningFailure, failureUsage, withUsage } from './learning-errors.ts';
-import { EVIDENCE_VERSION, usesEvidence } from './evidence.ts';
+import { ESSENTIAL_VERSION, EVIDENCE_VERSION, usesEvidence } from './evidence.ts';
 
 export const COURSE_READING_REQUIRED='Aucun passage vérifié n’est encore disponible pour travailler ce cours.';
 
@@ -20,7 +20,7 @@ const EXTRACTOR='course-reader-1';
 export async function ownedCourse(db:PrismaClient,userId:string,id:string) {
   const course=await db.courseTheme.findFirst({
     where:{id,userId},
-    include:{parts:{
+    include:{subject:true,parts:{
       orderBy:[{position:'asc'},{id:'asc'}],
       include:{placements:{
         orderBy:[{createdAt:'asc'},{id:'asc'}],
@@ -147,13 +147,14 @@ export async function prepareLearning(db:PrismaClient,userId:string,courseId:str
   const passages=snapshot.passages.filter(p=>p.quality==='verified');
   if(!passages.length)throw new Error(COURSE_READING_REQUIRED);
   if(passages.reduce((n,p)=>n+p.text.length,0)>60000)throw new LearningFailure('SOURCE_UNUSABLE');
-  const key=digest(JSON.stringify([courseId,snapshot.fingerprint,mode,minutes,instruction,process.env.LLM_PROVIDER ?? 'mock',process.env.LLM_MODEL ?? 'gpt-5-mini',usesEvidence(mode)?EVIDENCE_VERSION:'learning-v1']));
+  const evidenceVersion=mode==='essential'?ESSENTIAL_VERSION:usesEvidence(mode)?EVIDENCE_VERSION:'learning-v1';
+  const key=digest(JSON.stringify([courseId,snapshot.fingerprint,...(mode==='essential'?[course.subject.title]:[]),mode,minutes,instruction,process.env.LLM_PROVIDER ?? 'mock',process.env.LLM_MODEL ?? 'gpt-5-mini',evidenceVersion]));
   let version=await db.projectVersion.findUnique({where:{userId_cacheKey:{userId,cacheKey:key}}});
   if(!version) {
     const operation=await claim(db,userId,key,process.env.LLM_PROVIDER ?? 'mock','learning');const started=Date.now();
     let receivedUsage:Usage={};
     try {
-      const result=await generateCourse({mode,minutes,instruction,passages},trace);
+      const result=await generateCourse({mode,minutes,instruction,passages,subject:course.subject.title},trace);
       receivedUsage=result.usage;
       trace?.event('transaction-start');
       version=await db.$transaction(async tx=>{

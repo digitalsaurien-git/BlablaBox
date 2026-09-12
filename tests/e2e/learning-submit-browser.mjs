@@ -117,6 +117,23 @@ test('navigateur réel : soumission, récupération et parcours du cours', {time
       } finally {page.off('request',listener);}
     });
 
+    await t.test('cartes essentielles titrées, accessibles et sans débordement mobile',async()=>{
+      await open(coursePath+'/understand');
+      await page.getByRole('button',{name:'Montre-moi l’essentiel',exact:true}).click();
+      await page.waitForURL('**/content/*');
+      const cards=page.locator('#lecture section');
+      assert.ok(await cards.count()>=1&&await cards.count()<=3);
+      for(let index=0;index<await cards.count();index++) {
+        const card=cards.nth(index);
+        assert.equal(await card.getByRole('heading',{level:2}).count(),1);
+        assert.equal(await card.getByText('Voir dans mon cours',{exact:true}).count(),1);
+      }
+      assert.equal((await page.content()).includes('Explication à partir du cours'),false);
+      await page.setViewportSize({width:320,height:740});
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
+      await page.setViewportSize({width:390,height:844});
+    });
+
     await t.test('erreur de lecture dans chacun des trois parcours et bouton réactivé',async()=>{
       for(const [route,label] of [['understand','Explique-moi simplement'],['revise?minutes=5','Quiz'],['homework','M’aider à commencer']]) {
         await open(`/courses/${imageOnly.id}/${route}`);

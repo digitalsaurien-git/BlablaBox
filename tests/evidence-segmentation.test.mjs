@@ -84,7 +84,8 @@ test('schéma modèle sans citations, nombres toujours contrôlés bloc par bloc
   let stats;const e=context.segments.find(e=>e.text.includes('Toumaï'));
   const raw={text:'Toumaï date de 99 Ma.',kind:'explanation',segmentIds:[e.id]};
   assert.throws(()=>validateActivity({blocks:[raw]},[source],'explain',s=>stats=s,context.resolve),{code:'NO_USABLE_BLOCKS'});assert.deepEqual(stats.codes,['UNVERIFIABLE_NUMBER']);
-  const valid={...raw,text:'Toumaï date de 7 millions d’années.'};
+  assert.throws(()=>validateActivity({blocks:[{...raw,text:'Toumaï date de 7 millions d’années.'}]},[source],'explain',undefined,context.resolve),{code:'NO_USABLE_BLOCKS'});
+  const valid={...raw,text:'Toumaï date de 7 Ma.'};
   assert.equal(validateActivity({blocks:[valid]},[source],'explain',undefined,context.resolve).blocks.length,1);
   const duplicates=validateActivity({blocks:[valid,{...valid,text:'  Toumaï date de 7 millions d’années.  '}]},[source],'explain',undefined,context.resolve);
   assert.equal(duplicates.blocks.length,1);assert.equal(duplicates.elementsOmitted,true);

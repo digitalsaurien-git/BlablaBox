@@ -69,7 +69,7 @@ test('un worker terminé sans résultat libère la lecture au lieu de laisser un
 });
 
 const responseFor=data=>{
-  const wire=data.blocks&&!data.visual?{blocks:data.blocks.map(({text,kind,citations})=>({text,kind,segmentIds:citations.map(ref=>evidenceContext(passages).segments.find(e=>e.passageId===ref.passageId&&e.text===ref.quote)?.id??'foreign')}))}:data;
+  const wire=data.blocks&&!data.visual?{blocks:data.blocks.map(({title,text,kind,citations})=>({...title&&{title},text,kind,segmentIds:citations.map(ref=>evidenceContext(passages).segments.find(e=>e.passageId===ref.passageId&&e.text===ref.quote)?.id??'foreign')}))}:data;
   return Response.json({output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(wire)}]}],usage:{input_tokens:3,output_tokens:4}});
 };
 test('budget OpenAI unique : génération, corps, audit et corps audit, sans relance',async t=>{

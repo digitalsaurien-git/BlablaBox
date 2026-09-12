@@ -43,9 +43,26 @@ Il reçoit uniquement les éléments déjà validés et leurs citations exactes,
 les passages complets non utilisés. Les quiz et devoirs conservent leur contrat
 et leurs refus stricts. Aucun troisième appel ni tentative automatique de réparation.
 
-La version de cache `evidence-1` permet d'utiliser la nouvelle méthode lors d'une
+Pour `essential`, le serveur détecte dans les seuls segments factuels un catalogue
+borné de repères : noms propres, dates et unités, définitions, lieux, règles,
+méthodes, formules, vocabulaire, causes, conséquences et étapes. Leur ordre varie
+selon un profil local (`history-geography`, `mathematics`, `language` ou `other`).
+Une association nom-date présente dans un même segment, telle que `Toumaï` et
+`7 Ma`, passe avant les autres repères en histoire-géographie. Les trois premières
+preuves couvrent des catégories différentes lorsque le document le permet.
+Ces indices ne contiennent que l'ID du segment, leurs catégories et les libellés
+déjà présents dans le segment ; ils ne créent aucune connaissance.
+
+Chaque carte `essential` exige un titre distinct de 60 caractères maximum et une
+explication d'une ou deux phrases. Les titres génériques sont rejetés. Les nombres
+avec unité doivent reprendre exactement l'unité citée. Le titre et l'explication
+sont inclus dans l'audit sémantique existant. L'interface affiche le titre comme
+un vrai niveau de rubrique et conserve `Voir dans mon cours` sous chaque carte.
+
+La version de cache `essential-2` permet d'utiliser la nouvelle méthode lors d'une
 demande explicite sur un cours déjà enregistré. Elle ne modifie ni ne régénère
-les anciennes productions. Les appels suivants réutilisent la nouvelle version.
+les anciennes productions. Les caches `explain` et `summary` conservent leur
+version. Les appels `essential` suivants réutilisent la nouvelle version.
 
 ## Navigation et vérification
 
@@ -58,7 +75,7 @@ de débordement à 390 et 320 px. Cette mesure inclut le transport local et Reac
 mais n'est pas une mesure de latence en production. Aucun identifiant métier ni
 contenu n'est ajouté aux traces de mesure et aucun système de télémétrie n'est créé.
 
-Tests dédiés : `evidence-segmentation.test.mjs`, `evidence-database.test.mjs`,
+Tests dédiés : `essential-learning.test.mjs`, `evidence-segmentation.test.mjs`, `evidence-database.test.mjs`,
 `grounded-generation.test.mjs`, `course-learning.test.mjs` et
 `e2e/learning-submit-browser.mjs`. Les tests PostgreSQL exigent une URL explicite
 validée par `tests/helpers/lot2-environment.mjs` ; les appels OpenAI sont interceptés.
@@ -70,18 +87,19 @@ pages dont les marqueurs ou la structure ont été perdus peuvent fournir moins 
 preuves. La présence de plusieurs segments ne prouve pas autant d'idées distinctes :
 l'audit reste nécessaire et peut ne conserver qu'un seul bloc. Aucun assouplissement
 des contrôles ne garantit deux ou trois blocs lorsque les preuves sont insuffisantes.
-Les conversions d'unités ne sont pas déduites localement ; la validation numérique
-existante et l'audit sont conservés. Les pages-images restent proposées séparément,
+Les conversions d'unités ne sont pas déduites localement : le nombre et l'unité
+doivent rester ceux de la preuve. Les pages-images restent proposées séparément,
 avec consentement explicite, sans bloquer les passages déjà lisibles.
 
 ## Vérifications de livraison
 
-Le 12 septembre 2026 : 138 tests du dépôt réussis, aucun ignoré, avec PostgreSQL
-jetable ; 10 tests navigateur réussis. Dernière mesure locale après `done` : 41 ms,
-un POST et aucun GET additionnel de la page de résultat. Typecheck, Prisma validate,
-génération du client Prisma, build et vérification des espaces Git réussis. Les
-bundles client ne contiennent aucun des marqueurs serveur sensibles recherchés.
-Les sept migrations existantes ont été appliquées uniquement à la base jetable.
+Le 12 septembre 2026, pour l'extension `essential` : 128 tests du dépôt réussis
+et 6 tests PostgreSQL ignorés faute d'URL de base jetable. Aucune base et aucune
+migration n'ont été utilisées. Le scénario navigateur des cartes mobiles a été
+ajouté ; sa compilation est couverte par le build, mais son exécution nécessite
+PostgreSQL jetable. Typecheck, Prisma validate, génération du client Prisma, build
+et vérification des espaces Git réussis. Les bundles client ne contiennent aucun
+des marqueurs serveur sensibles recherchés.
 
 Fichiers du lot :
 

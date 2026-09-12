@@ -3,9 +3,10 @@ import { block, question, visual, learningSchema, validateGroundedOutput, type L
 import { LearningFailure, learningErrorCode, type LearningErrorCode } from './learning-errors.ts';
 
 const shortBlock=block.extend({text:z.string().min(1).max(450),citations:z.array(z.object({passageId:z.string().min(1),quote:z.string().min(1).max(500)}).strict()).min(1).max(2)});
+const essentialBlock=shortBlock.extend({title:z.string().min(1).max(60)});
 export const explainSchema=z.object({blocks:z.array(shortBlock).min(1).max(3)}).strict();
 export const summarySchema=z.object({blocks:z.array(shortBlock).min(1).max(2)}).strict();
-export const essentialSchema=z.object({blocks:z.array(shortBlock).min(1).max(3)}).strict();
+export const essentialSchema=z.object({blocks:z.array(essentialBlock).min(1).max(3)}).strict();
 export const visualSchema=z.object({blocks:z.array(shortBlock).min(1).max(3),visual}).strict();
 export const revisionSchema=z.object({questions:z.array(question).min(1).max(8)}).strict();
 export const homeworkSchema=z.object({homework:learningSchema.shape.homework.unwrap()}).strict();
@@ -55,9 +56,15 @@ export function validateActivity(raw:unknown,passages:Passage[],mode:LearningMod
   const maximum=mode==='summary'?2:3;
   for(const rawBlock of rawBlocks) {
     try {
-      const parsed=shortBlock.safeParse(resolveBlock?resolveBlock(rawBlock):rawBlock);
+      const parsed=(mode==='essential'?essentialBlock:shortBlock).safeParse(resolveBlock?resolveBlock(rawBlock):rawBlock);
       if(!parsed.success||output.blocks.length>=maximum)throw new LearningFailure('INVALID_STRUCTURE');
       if(resolveBlock&&output.blocks.some(b=>b.text.normalize('NFC').toLocaleLowerCase('fr').replace(/\s+/g,' ').trim()===parsed.data.text.normalize('NFC').toLocaleLowerCase('fr').replace(/\s+/g,' ').trim()))throw new LearningFailure('INVALID_STRUCTURE');
+      if(mode==='essential') {
+        const title=parsed.data.title!;
+        const normalizedTitle=title.normalize('NFC').toLocaleLowerCase('fr').replace(/\s+/g,' ').trim();
+        if(/^(?:explication à partir du cours|à retenir|l['’]essentiel)$/iu.test(normalizedTitle)||output.blocks.some(block=>block.title?.normalize('NFC').toLocaleLowerCase('fr').replace(/\s+/g,' ').trim()===normalizedTitle))throw new LearningFailure('INVALID_STRUCTURE');
+        if((parsed.data.text.match(/[.!?](?=\s|$)/g)?.length??0)>2)throw new LearningFailure('INVALID_STRUCTURE');
+      }
       const candidate={...shell(mode),blocks:[parsed.data]};
       output.blocks.push(validateGroundedOutput(candidate,owned,'explain').blocks[0]);stats.acceptedBlocks++;
     } catch(error){reject(error);}
