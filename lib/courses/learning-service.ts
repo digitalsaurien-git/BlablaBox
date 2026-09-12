@@ -9,6 +9,7 @@ import { generateSegmentedStoredAudio } from '../segmented-audio-generation.ts';
 import { storedAudioExists } from '../audio-storage.ts';
 import { getTTSProvider } from '../providers/tts/index.ts';
 import type { LearningTrace } from './learning-trace.ts';
+import { LearningFailure, failureUsage, withUsage } from './learning-errors.ts';
 
 export const COURSE_READING_REQUIRED='Aucun passage vérifié n’est encore disponible pour travailler ce cours.';
 
@@ -144,13 +145,15 @@ export async function prepareLearning(db:PrismaClient,userId:string,courseId:str
   const evaluation=['quiz','gap','order','mix','homework'].includes(mode);
   const passages=snapshot.passages.filter(p=>p.quality==='verified');
   if(!passages.length)throw new Error(COURSE_READING_REQUIRED);
-  if(passages.reduce((n,p)=>n+p.text.length,0)>60000)throw new Error('Ce cours dépasse la limite de préparation de 60 000 caractères.');
+  if(passages.reduce((n,p)=>n+p.text.length,0)>60000)throw new LearningFailure('SOURCE_UNUSABLE');
   const key=digest(JSON.stringify([courseId,snapshot.fingerprint,mode,minutes,instruction,process.env.LLM_PROVIDER ?? 'mock',process.env.LLM_MODEL ?? 'gpt-5-mini','learning-v1']));
   let version=await db.projectVersion.findUnique({where:{userId_cacheKey:{userId,cacheKey:key}}});
   if(!version) {
     const operation=await claim(db,userId,key,process.env.LLM_PROVIDER ?? 'mock','learning');const started=Date.now();
+    let receivedUsage:Usage={};
     try {
       const result=await generateCourse({mode,minutes,instruction,passages},trace);
+      receivedUsage=result.usage;
       trace?.event('transaction-start');
       version=await db.$transaction(async tx=>{
         const project=await tx.project.create({data:{userId,courseThemeId:courseId,title:course.title,sourceContent:passages.map(p=>p.text).join('\n\n'),targetDurationMinutes:minutes,audience:'10-12 ans',tone:'Clair',level:'Simple',learningObjective:'Travailler ce cours',projectKind:'COURSE_LEARNING',researchMode:'NONE',researchUsed:false,script:result.data.blocks.map(b=>b.text).join('\n\n'),scriptStatus:'SCRIPT_GENERATED'}});
@@ -171,7 +174,10 @@ export async function prepareLearning(db:PrismaClient,userId:string,courseId:str
         await complete(tx,operation.id,started,result.usage);
         return created;
       });
-    } catch(error) {await complete(db,operation.id,started,{},'FAILED');throw error;}
+    } catch(error) {
+      const failure=withUsage(error,{...receivedUsage,...failureUsage(error)});
+      await complete(db,operation.id,started,failureUsage(failure),'FAILED');throw failure;
+    }
   }
   if(evaluation) {
     const session=await db.learningSession.create({data:{userId,courseThemeId:courseId,projectVersionId:version.id,kind:mode==='homework'?'homework':'revision',instruction:mode==='homework'?instruction:null}});
@@ -211,6 +217,7 @@ export async function advanceSession(db:PrismaClient,userId:string,id:string) {
 export async function requestCorrection(db:PrismaClient,userId:string,id:string) {
   const s=await ownedSession(db,userId,id);
   if(s.kind!=='homework')throw new Error('Devoir introuvable.');
+  if(!s.attempts.length)throw new Error('Écris d’abord une tentative avant de voir la correction.');
   await db.learningSession.updateMany({where:{id,userId},data:{correctionRequested:true}});
 }
 

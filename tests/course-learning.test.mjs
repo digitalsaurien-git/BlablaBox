@@ -35,9 +35,9 @@ test('lecture refuse format inconnu et références externes ODT',async()=>{
 });
 test('explications citées, refus citation étrangère, nombres inventés et évaluation incertaine',()=>{
   for(const mode of ['explain','summary','essential'])assert.ok(validateGroundedOutput(mockCourse({...input,mode}),passages,mode).blocks.length);
-  const raw=mockCourse(input);raw.blocks[0].citations[0].passageId='foreign';assert.throws(()=>validateGroundedOutput(raw,passages,'explain'),/vérifier/);
-  const invented=mockCourse(input);invented.blocks[0].text+=' En 9999.';assert.throws(()=>validateGroundedOutput(invented,passages,'explain'),/vérifier/);
-  assert.throws(()=>validateGroundedOutput(mockCourse({...input,mode:'quiz'}),passages.map(p=>({...p,quality:'uncertain'})),'quiz'),/vérifier/);
+  const raw=mockCourse(input);raw.blocks[0].citations[0].passageId='foreign';assert.throws(()=>validateGroundedOutput(raw,passages,'explain'),{code:'UNKNOWN_CITATION'});
+  const invented=mockCourse(input);invented.blocks[0].text+=' En 9999.';assert.throws(()=>validateGroundedOutput(invented,passages,'explain'),{code:'UNVERIFIABLE_NUMBER'});
+  assert.throws(()=>validateGroundedOutput(mockCourse({...input,mode:'quiz'}),passages.map(p=>({...p,quality:'uncertain'})),'quiz'),{code:'UNKNOWN_CITATION'});
 });
 test('cinq types d’exercices : correction déterministe, QCM unique et projection publique',()=>{
   const output=validateGroundedOutput(mockCourse({...input,mode:'mix'}),passages,'mix');assert.deepEqual(new Set(output.questions.map(q=>q.type)),new Set(['gap','boolean','mcq','order','association']));
@@ -102,8 +102,8 @@ test('expiration pendant le corps transforme aussi AbortError en message de dél
 test('succès OpenAI simulé : deux appels seulement, même signal et phases complètes',async t=>{
   const oldProvider=process.env.LLM_PROVIDER,oldKey=process.env.LLM_API_KEY;process.env.LLM_PROVIDER='openai';process.env.LLM_API_KEY='synthetic';
   let calls=0;const signals=[],events=[];
-  t.mock.method(globalThis,'fetch',async(_url,options)=>{signals.push(options.signal);return responseFor(++calls===1?mockCourse(input):{supported:true,unambiguous:true});});
-  try {const result=await generateCourse(input,{event:e=>events.push(e),failed:()=>{}});assert.equal(calls,2);assert.equal(signals[0],signals[1]);assert.deepEqual(result.usage,{inputTokens:6,outputTokens:8});assert.deepEqual(events,['generation-start','generation-end','audit-start','audit-end']);}
+  t.mock.method(globalThis,'fetch',async(_url,options)=>{signals.push(options.signal);return responseFor(++calls===1?mockCourse(input):{decisions:[{id:'b0',supported:true},{id:'b1',supported:true}]});});
+  try {const result=await generateCourse(input,{event:e=>events.push(e),failed:()=>{}});assert.equal(calls,2);assert.equal(signals[0],signals[1]);assert.deepEqual(result.usage,{inputTokens:6,outputTokens:8});assert.deepEqual(events,['generation-start','generation-end','validation-start','validation-end','audit-start','audit-end']);}
   finally {if(oldProvider===undefined)delete process.env.LLM_PROVIDER;else process.env.LLM_PROVIDER=oldProvider;if(oldKey===undefined)delete process.env.LLM_API_KEY;else process.env.LLM_API_KEY=oldKey;}
 });
 

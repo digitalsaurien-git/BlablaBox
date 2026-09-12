@@ -56,6 +56,8 @@ test('PostgreSQL apprentissage : sources, consentement, cache, versions, activit
     assert.equal((await ownedSession(db,ids[0],session.id)).position,questions.length);
     const hw=await prepareLearning(db,ids[0],course.id,'homework',5,'Explique la germination.');
     const first=await ownedSession(db,ids[0],hw.sessionId);assert.equal(first.correctionRequested,false);assert.equal(first.attempts.length,0);
+    await assert.rejects(requestCorrection(db,ids[0],hw.sessionId),/tentative/);
+    assert.equal((await ownedSession(db,ids[0],hw.sessionId)).correctionRequested,false);
     await assert.rejects(advanceSession(db,ids[0],hw.sessionId),/d’abord/);
     await answerSession(db,ids[0],hw.sessionId,0,'La germination fait pousser la plante.');await advanceSession(db,ids[0],hw.sessionId);
     assert.equal((await ownedSession(db,ids[0],hw.sessionId)).position,1);

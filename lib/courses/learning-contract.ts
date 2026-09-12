@@ -1,15 +1,16 @@
 import { z } from 'zod';
+import { LearningFailure } from './learning-errors.ts';
 export const citationSchema = z.object({passageId:z.string().min(1),quote:z.string().min(1).max(2000)}).strict();
 const refs = z.array(citationSchema).min(1).max(8);
-const block = z.object({text:z.string().min(1).max(1200),kind:z.enum(['explanation','example']),citations:refs}).strict();
-const question = z.object({
+export const block = z.object({text:z.string().min(1).max(1200),kind:z.enum(['explanation','example']),citations:refs}).strict();
+export const question = z.object({
   type:z.enum(['mcq','boolean','gap','order','association']),
   prompt:z.string().min(1).max(600),choices:z.array(z.string().max(300)).max(8),
   expected:z.array(z.string().min(1).max(300)).min(1).max(8),
   variants:z.array(z.string().min(1).max(300)).max(10),
   explanation:z.string().min(1).max(700),difficulty:z.enum(['easy','medium']),citations:refs,
 }).strict();
-const visual = z.object({
+export const visual = z.object({
   type:z.enum(['timeline','concepts','steps','comparison','mindmap']),
   title:z.string().max(120),items:z.array(z.object({label:z.string().min(1).max(160),detail:z.string().max(300),parent:z.number().int().min(-1).max(9),citations:refs}).strict()).min(2).max(10),
 }).strict();
@@ -17,6 +18,7 @@ export const learningSchema = z.object({
   title:z.string().min(1).max(160),blocks:z.array(block).min(1).max(8),
   questions:z.array(question).max(12),visual:visual.nullable(),
   homework:z.object({rephrased:z.string().min(1).max(600),check:z.string().min(1).max(400),hints:z.array(block).length(2),correction:z.array(block).min(1).max(5),keywords:z.array(z.string().min(1).max(120)).min(1).max(8),citations:refs}).strict().nullable(),
+  elementsOmitted:z.boolean().optional(),
 }).strict();
 export type LearningOutput = z.infer<typeof learningSchema>;
 export type Question = LearningOutput['questions'][number];
@@ -27,18 +29,21 @@ export const normalizeAnswer = (s:string) => s.normalize('NFD').replace(/[\u0300
 export const insufficient = 'Je ne peux pas le vérifier avec ce cours.';
 
 export function validateGroundedOutput(raw:unknown, passages:Passage[], mode:LearningMode):LearningOutput {
-  const result = learningSchema.parse(raw);
+  const parsed = learningSchema.safeParse(raw);
+  if(!parsed.success)throw new LearningFailure('INVALID_STRUCTURE');
+  const result=parsed.data;
   const byId = new Map(passages.map(p=>[p.id,p]));
   function verify(text:string, citations:z.infer<typeof citationSchema>[], evaluation=false) {
     for(const ref of citations) {
       const p = byId.get(ref.passageId);
-      if(!p || !p.text.includes(ref.quote) || (evaluation && p.quality!=='verified')) throw new Error(insufficient);
+      if(!p || (evaluation && p.quality!=='verified'))throw new LearningFailure('UNKNOWN_CITATION');
+      if(!p.text.includes(ref.quote))throw new LearningFailure('QUOTE_MISMATCH');
     }
     const evidence = citations.map(c=>c.quote).join(' ');
     const numbers: string[] = text.match(/\d+(?:[.,]\d+)?/g) ?? [];
     const sourceNumbers: string[] = evidence.match(/\d+(?:[.,]\d+)?/g) ?? [];
-    if(numbers.some(n=>!sourceNumbers.includes(n))) throw new Error(insufficient);
-    if(/https?:\/\/|<\/?(?:script|iframe)|storageKey|DATABASE_URL/i.test(text)) throw new Error(insufficient);
+    if(numbers.some(n=>!sourceNumbers.includes(n)))throw new LearningFailure('UNVERIFIABLE_NUMBER');
+    if(/https?:\/\/|<\/?(?:script|iframe)|storageKey|DATABASE_URL/i.test(text))throw new LearningFailure('INVALID_STRUCTURE');
   }
   for(const b of result.blocks) verify(b.text,b.citations);
   for(const q of result.questions) {

@@ -7,16 +7,14 @@ import { MODES, type LearningMode } from '@/lib/courses/learning-contract';
 import { advanceSession, analyzeCourse, answerSession, COURSE_READING_REQUIRED, prepareAudio, prepareLearning, requestCorrection, reviewExtraction } from '@/lib/courses/learning-service';
 import { LLM_TIMEOUT_MESSAGE } from '@/lib/providers/llm/course-provider';
 import { createLearningTrace } from '@/lib/courses/learning-trace';
+import { learningErrorCategory } from '@/lib/courses/learning-errors';
 const field=(f:FormData,k:string)=>typeof f.get(k)==='string'?String(f.get(k)):'';
 const coursePath=(id:string)=>`/courses/${encodeURIComponent(id)}`;
 function code(error:unknown) {
   const message=error instanceof Error?error.message:'';
   if(message===LLM_TIMEOUT_MESSAGE)return 'timeout';
   if(message===COURSE_READING_REQUIRED)return 'reading';
-  if(/vérifi|étayer|ambigu|possible|limite|dépasse|entièrem/.test(message))return 'source';
-  if(/configur/.test(message))return 'provider';
-  if(/déjà|interrompue/.test(message))return 'pending';
-  return 'failed';
+  return learningErrorCategory(error);
 }
 export async function analyzeLearningCourse(form:FormData) {
   const user=await requireCurrentUser();const id=field(form,'courseId');
@@ -30,6 +28,7 @@ export async function startCourseLearning(form:FormData) {
   const trace=createLearningTrace();trace.event('action-start');
   const user=await requireCurrentUser();const id=field(form,'courseId');const mode=field(form,'mode');
   if(!MODES.includes(mode as LearningMode))redirect(coursePath(id));
+  trace.activity?.(mode as LearningMode);
   const minutes=form.get('minutes')==='10'?10:5;
   const path=mode==='homework'?'homework':['quiz','gap','order','mix'].includes(mode)?'revise':'understand';
   let result;

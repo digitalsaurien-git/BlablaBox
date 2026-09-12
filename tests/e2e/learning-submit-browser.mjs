@@ -13,6 +13,7 @@ import { disposableDatabaseUrl } from '../helpers/lot2-environment.mjs';
 import { syntheticOdt, syntheticPdf } from '../helpers/source-fixtures.mjs';
 import { importSource } from '../../lib/sources/import.ts';
 import { createSessionToken, hashSessionToken } from '../../lib/auth/session-core.ts';
+import { REJECTED_PRODUCTION_MESSAGE } from '../../lib/courses/learning-errors.ts';
 
 const {chromium}=createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE||'playwright');
 const url=disposableDatabaseUrl(process.env.LOT2_TEST_DATABASE_URL);
@@ -136,13 +137,56 @@ test('navigateur réel : soumission, récupération et parcours du cours', {time
       assert.equal(await page.getByRole('region',{name:'État du cours'}).getByRole('alert').count(),0);
     });
 
+    await t.test('rejet de génération distinct de la lecture et omission sobre sur le contenu',async()=>{
+      await open(coursePath+'/understand?error=generation');
+      const errorNotice=page.getByRole('alert').filter({hasText:REJECTED_PRODUCTION_MESSAGE});
+      assert.equal(await errorNotice.innerText(),REJECTED_PRODUCTION_MESSAGE);
+      assert.equal(await errorNotice.getByRole('link').count(),0);
+      assert.equal(await page.getByRole('button',{name:'Explique-moi simplement',exact:true}).isEnabled(),true);
+      const version=await db.projectVersion.findFirstOrThrow({where:{userId:ids[0],mode:'explain'}});
+      await db.projectVersion.update({where:{id:version.id},data:{content:{...version.content,elementsOmitted:true}}});
+      await open(coursePath+'/content/'+version.id);
+      await page.getByRole('status').getByText('Certains éléments ont été écartés. Voici ceux que nous avons pu vérifier.',{exact:true}).waitFor();
+      for(const block of version.content.blocks)await page.getByText(block.text,{exact:true}).first().waitFor();
+    });
+
+    await t.test('réponses et correction absentes du HTML avant tentative, même avec un ancien drapeau',async()=>{
+      await open(coursePath+'/revise?minutes=5');
+      await page.getByRole('button',{name:'Quiz',exact:true}).click();await page.waitForURL('**/session/*');
+      const revisionId=new URL(page.url()).pathname.split('/').at(-1);
+      const revision=await db.learningSession.findUniqueOrThrow({where:{id:revisionId},include:{projectVersion:true}});
+      const revisionContent=structuredClone(revision.projectVersion.content);
+      revisionContent.questions[0].expected=['EXPECTED_REVISION_CANARY'];revisionContent.questions[0].explanation='FEEDBACK_CANARY';
+      await db.projectVersion.update({where:{id:revision.projectVersionId},data:{content:revisionContent}});
+      await open(coursePath+'/session/'+revisionId);
+      for(const marker of ['EXPECTED_REVISION_CANARY','FEEDBACK_CANARY'])assert.equal((await page.content()).includes(marker),false);
+      await page.getByRole('radio').first().check();await page.getByRole('button',{name:'Vérifier ma réponse',exact:true}).click();
+      await page.getByText('Réponse attendue : EXPECTED_REVISION_CANARY',{exact:true}).waitFor();
+
+      await open(coursePath+'/homework');await page.getByRole('textbox').fill('Consigne synthétique');
+      await page.getByRole('button',{name:'M’aider à commencer',exact:true}).click();await page.waitForURL('**/session/*');
+      const homeworkId=new URL(page.url()).pathname.split('/').at(-1);
+      const homework=await db.learningSession.findUniqueOrThrow({where:{id:homeworkId},include:{projectVersion:true}});
+      const homeworkContent=structuredClone(homework.projectVersion.content);
+      homeworkContent.homework.correction[0].text='CORRECTION_HOMEWORK_CANARY';
+      await db.projectVersion.update({where:{id:homework.projectVersionId},data:{content:homeworkContent}});
+      await db.learningSession.update({where:{id:homeworkId},data:{correctionRequested:true}});
+      await open(coursePath+'/session/'+homeworkId);
+      assert.equal((await page.content()).includes('CORRECTION_HOMEWORK_CANARY'),false);
+      assert.equal(await page.getByRole('button',{name:'Je demande à voir la correction expliquée',exact:true}).count(),0);
+      await page.getByRole('textbox').fill('Tentative synthétique');
+      await page.getByRole('button',{name:'Regarder ma réponse',exact:true}).click();
+      await page.getByText('Comparer avec une correction expliquée',{exact:true}).click();
+      await page.getByText('CORRECTION_HOMEWORK_CANARY',{exact:true}).waitFor();
+    });
+
     await t.test('isolation HTTP et traces dépourvues de données personnelles',async()=>{
       const tokenB=createSessionToken();await db.session.create({data:{userId:ids[1],tokenHash:hashSessionToken(tokenB),expiresAt:new Date(Date.now()+3600000)}});
       await context.clearCookies();await context.addCookies([{name:'__Host-blablabox_session',value:tokenB,url:base.replace("http:","https:"),secure:true,httpOnly:true,sameSite:'Lax'}]);
       const response=await page.goto(base+coursePath);assert.equal(response.status(),404);
       const traceLines=logs.split(/\r?\n/).filter(line=>line.startsWith('{"scope":"course-learning"')).map(line=>JSON.parse(line));
       assert.ok(traceLines.some(l=>l.event==='action-start'));assert.ok(traceLines.some(l=>l.event==='transaction-start'));assert.ok(traceLines.some(l=>l.event==='done'));assert.ok(traceLines.some(l=>l.event==='failed'));
-      const traces=JSON.stringify(traceLines);for(const value of [...ids,token,course.id,'synthetic.odt','Consigne synthétique','La germination','@example.invalid'])assert.equal(traces.includes(value),false);
+      const traces=JSON.stringify(traceLines);for(const value of [...ids,token,course.id,'synthetic.odt','Consigne synthétique','La germination','@example.invalid','EXPECTED_REVISION_CANARY','CORRECTION_HOMEWORK_CANARY','Tentative synthétique'])assert.equal(traces.includes(value),false);
       assert.equal(await db.providerUsage.count({where:{userId:ids[1]}}),0);
     });
   } finally {

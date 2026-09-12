@@ -58,6 +58,16 @@ test('préparation automatique : concurrence, cache, pages images, refus et isol
     assert.equal(await db.providerUsage.count({where:{userId:ids[0],operation:'ocr'}}),0);
     assert.equal(calls,0);
     assert.equal(await db.sourceExtraction.count({where:{userId:ids[1]}}),0);
+    // A received response rejected by validation must retain its counters only.
+    process.env.LLM_PROVIDER='openai';process.env.LLM_API_KEY='synthetic';
+    t.mock.method(globalThis,'fetch',async()=>{calls++;return Response.json({output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({blocks:[{text:'9999 jours.',kind:'explanation',citations:[{passageId:'foreign-account',quote:'synthetic'}]}]})}]}],usage:{input_tokens:111,output_tokens:222}});});
+    await assert.rejects(prepareLearning(db,ids[0],course.id,'explain',5),{code:'NO_USABLE_BLOCKS'});
+    assert.equal(calls,1);
+    const failedUsage=await db.providerUsage.findFirst({where:{userId:ids[0],provider:'openai',status:'FAILED'}});
+    assert.equal(failedUsage.inputTokens,111);assert.equal(failedUsage.outputTokens,222);
+    assert.equal(await db.projectVersion.count({where:{userId:ids[0],mode:'explain'}}),1,'only the earlier mock version');
+    assert.equal(await db.providerUsage.count({where:{userId:ids[1]}}),0);
+    calls=0;
     // A timed-out audit must not publish the completed generation or a session.
     const controller=new AbortController();process.env.LLM_PROVIDER='openai';process.env.LLM_API_KEY='synthetic';
     t.mock.method(AbortSignal,'timeout',()=>controller.signal);
@@ -72,7 +82,7 @@ test('préparation automatique : concurrence, cache, pages images, refus et isol
     assert.equal(await db.projectVersion.count({where:{userId:ids[0]}}),before.versions);
     assert.equal(await db.project.count({where:{userId:ids[0]}}),before.projects);
     assert.equal(await db.learningSession.count({where:{userId:ids[0]}}),before.sessions);
-    assert.equal(await db.providerUsage.count({where:{userId:ids[0],provider:'openai',status:'FAILED'}}),1);
+    assert.equal(await db.providerUsage.count({where:{userId:ids[0],provider:'openai',status:'FAILED'}}),2);
     assert.equal(await db.providerUsage.count({where:{userId:ids[0],status:'PENDING'}}),0);
   } finally {
     await db.user.deleteMany({where:{id:{in:ids}}});await db.$disconnect();
