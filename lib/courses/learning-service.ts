@@ -10,6 +10,7 @@ import { storedAudioExists } from '../audio-storage.ts';
 import { getTTSProvider } from '../providers/tts/index.ts';
 import type { LearningTrace } from './learning-trace.ts';
 import { LearningFailure, failureUsage, withUsage } from './learning-errors.ts';
+import { EVIDENCE_VERSION, usesEvidence } from './evidence.ts';
 
 export const COURSE_READING_REQUIRED='Aucun passage vérifié n’est encore disponible pour travailler ce cours.';
 
@@ -146,7 +147,7 @@ export async function prepareLearning(db:PrismaClient,userId:string,courseId:str
   const passages=snapshot.passages.filter(p=>p.quality==='verified');
   if(!passages.length)throw new Error(COURSE_READING_REQUIRED);
   if(passages.reduce((n,p)=>n+p.text.length,0)>60000)throw new LearningFailure('SOURCE_UNUSABLE');
-  const key=digest(JSON.stringify([courseId,snapshot.fingerprint,mode,minutes,instruction,process.env.LLM_PROVIDER ?? 'mock',process.env.LLM_MODEL ?? 'gpt-5-mini','learning-v1']));
+  const key=digest(JSON.stringify([courseId,snapshot.fingerprint,mode,minutes,instruction,process.env.LLM_PROVIDER ?? 'mock',process.env.LLM_MODEL ?? 'gpt-5-mini',usesEvidence(mode)?EVIDENCE_VERSION:'learning-v1']));
   let version=await db.projectVersion.findUnique({where:{userId_cacheKey:{userId,cacheKey:key}}});
   if(!version) {
     const operation=await claim(db,userId,key,process.env.LLM_PROVIDER ?? 'mock','learning');const started=Date.now();
@@ -159,7 +160,7 @@ export async function prepareLearning(db:PrismaClient,userId:string,courseId:str
         const project=await tx.project.create({data:{userId,courseThemeId:courseId,title:course.title,sourceContent:passages.map(p=>p.text).join('\n\n'),targetDurationMinutes:minutes,audience:'10-12 ans',tone:'Clair',level:'Simple',learningObjective:'Travailler ce cours',projectKind:'COURSE_LEARNING',researchMode:'NONE',researchUsed:false,script:result.data.blocks.map(b=>b.text).join('\n\n'),scriptStatus:'SCRIPT_GENERATED'}});
         const created=await tx.projectVersion.create({data:{userId,projectId:project.id,courseThemeId:courseId,version:1,mode,sourceFingerprint:snapshot.fingerprint,cacheKey:key,content:json(result.data)}});
         const citations:Array<{elementKey:string;passageId:string;quote:string}>=[];
-        const add=(elementKey:string,refs:Array<{passageId:string;quote:string}>)=>{for(const ref of refs)if(!citations.some(c=>c.elementKey===elementKey&&c.passageId===ref.passageId))citations.push({elementKey,...ref});};
+        const add=(elementKey:string,refs:Array<{passageId:string;quote:string}>)=>{refs.forEach((ref,i)=>citations.push({elementKey:`${elementKey}-ref-${i}`,...ref}));};
         result.data.blocks.forEach((b,i)=>add(`block-${i}`,b.citations));
         result.data.questions.forEach((q,i)=>add(`question-${i}`,q.citations));
         result.data.visual?.items.forEach((v,i)=>add(`visual-${i}`,v.citations));

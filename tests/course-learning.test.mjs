@@ -10,6 +10,7 @@ import { generateCourse, getLLMRequestTimeoutMs, LLM_TIMEOUT_MESSAGE, mockCourse
 import { createLearningTrace } from '../lib/courses/learning-trace.ts';
 import { getOCRProvider } from '../lib/providers/ocr/index.ts';
 import { syntheticPdf, syntheticOdt } from './helpers/source-fixtures.mjs';
+import { evidenceContext } from '../lib/courses/evidence.ts';
 const passages=[
   {id:'p1',text:'La germination est le début de la croissance. En 1900, la première observation commence.',quality:'verified',label:'Page 1',method:'native'},
   {id:'p2',text:'La floraison est la formation des fleurs. En 1910, la deuxième observation commence.',quality:'verified',label:'Page 2',method:'native'},
@@ -67,7 +68,10 @@ test('un worker terminé sans résultat libère la lecture au lieu de laisser un
   } finally {process.chdir(previous);assert.ok(path.resolve(directory).startsWith(path.resolve(tmpdir())+path.sep));await rm(directory,{recursive:true,force:true});}
 });
 
-const responseFor=data=>Response.json({output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(data)}]}],usage:{input_tokens:3,output_tokens:4}});
+const responseFor=data=>{
+  const wire=data.blocks&&!data.visual?{blocks:data.blocks.map(({text,kind,citations})=>({text,kind,segmentIds:citations.map(ref=>evidenceContext(passages).segments.find(e=>e.passageId===ref.passageId&&e.text===ref.quote)?.id??'foreign')}))}:data;
+  return Response.json({output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(wire)}]}],usage:{input_tokens:3,output_tokens:4}});
+};
 test('budget OpenAI unique : génération, corps, audit et corps audit, sans relance',async t=>{
   const old={LLM_PROVIDER:process.env.LLM_PROVIDER,LLM_API_KEY:process.env.LLM_API_KEY,LLM_REQUEST_TIMEOUT_MS:process.env.LLM_REQUEST_TIMEOUT_MS};
   process.env.LLM_PROVIDER='openai';process.env.LLM_API_KEY='synthetic';process.env.LLM_REQUEST_TIMEOUT_MS='120000';
@@ -102,7 +106,7 @@ test('expiration pendant le corps transforme aussi AbortError en message de dél
 test('succès OpenAI simulé : deux appels seulement, même signal et phases complètes',async t=>{
   const oldProvider=process.env.LLM_PROVIDER,oldKey=process.env.LLM_API_KEY;process.env.LLM_PROVIDER='openai';process.env.LLM_API_KEY='synthetic';
   let calls=0;const signals=[],events=[];
-  t.mock.method(globalThis,'fetch',async(_url,options)=>{signals.push(options.signal);return responseFor(++calls===1?mockCourse(input):{decisions:[{id:'b0',supported:true},{id:'b1',supported:true}]});});
+  t.mock.method(globalThis,'fetch',async(_url,options)=>{signals.push(options.signal);return responseFor(++calls===1?mockCourse(input):{decisions:mockCourse(input).blocks.map((_,i)=>({id:`b${i}`,supported:true}))});});
   try {const result=await generateCourse(input,{event:e=>events.push(e),failed:()=>{}});assert.equal(calls,2);assert.equal(signals[0],signals[1]);assert.deepEqual(result.usage,{inputTokens:6,outputTokens:8});assert.deepEqual(events,['generation-start','generation-end','validation-start','validation-end','audit-start','audit-end']);}
   finally {if(oldProvider===undefined)delete process.env.LLM_PROVIDER;else process.env.LLM_PROVIDER=oldProvider;if(oldKey===undefined)delete process.env.LLM_API_KEY;else process.env.LLM_API_KEY=oldKey;}
 });

@@ -25,7 +25,7 @@ const shell=(mode:LearningMode):LearningOutput=>({title:activityTitle(mode),bloc
 
 // Only fields belonging to this activity are consumed. Unexpected legacy/model
 // fields are discarded, never persisted or forwarded to the audit.
-export function validateActivity(raw:unknown,passages:Passage[],mode:LearningMode,report?:ReportValidation):LearningOutput {
+export function validateActivity(raw:unknown,passages:Passage[],mode:LearningMode,report?:ReportValidation,resolveBlock?:(raw:unknown)=>unknown):LearningOutput {
   const source=z.record(z.string(),z.unknown()).safeParse(raw);
   if(!source.success)throw new LearningFailure('INVALID_STRUCTURE');
   const allowed=Object.fromEntries(Object.keys(activitySchema(mode).shape).map(k=>[k,source.data[k]]));
@@ -55,8 +55,9 @@ export function validateActivity(raw:unknown,passages:Passage[],mode:LearningMod
   const maximum=mode==='summary'?2:3;
   for(const rawBlock of rawBlocks) {
     try {
-      const parsed=shortBlock.safeParse(rawBlock);
+      const parsed=shortBlock.safeParse(resolveBlock?resolveBlock(rawBlock):rawBlock);
       if(!parsed.success||output.blocks.length>=maximum)throw new LearningFailure('INVALID_STRUCTURE');
+      if(resolveBlock&&output.blocks.some(b=>b.text.normalize('NFC').toLocaleLowerCase('fr').replace(/\s+/g,' ').trim()===parsed.data.text.normalize('NFC').toLocaleLowerCase('fr').replace(/\s+/g,' ').trim()))throw new LearningFailure('INVALID_STRUCTURE');
       const candidate={...shell(mode),blocks:[parsed.data]};
       output.blocks.push(validateGroundedOutput(candidate,owned,'explain').blocks[0]);stats.acceptedBlocks++;
     } catch(error){reject(error);}

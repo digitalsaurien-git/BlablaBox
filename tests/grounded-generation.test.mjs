@@ -5,11 +5,15 @@ import { activitySchema, validateActivity } from '../lib/courses/activity-contra
 import { generateCourse, mockCourse, OUTPUT_LIMITS, conciseOptions } from '../lib/providers/llm/course-provider.ts';
 import { failureUsage, LearningFailure, learningErrorCategory, REJECTED_PRODUCTION_MESSAGE } from '../lib/courses/learning-errors.ts';
 import { createLearningTrace } from '../lib/courses/learning-trace.ts';
+import { evidenceContext } from '../lib/courses/evidence.ts';
 
 const passages=[{id:'owned',text:'La graine germe en 3 jours. Elle forme des racines.',quality:'verified',label:'Synthétique',method:'native'}];
 const good={text:'La graine germe en 3 jours.',kind:'explanation',citations:[{passageId:'owned',quote:'La graine germe en 3 jours.'}]};
 const input={mode:'explain',minutes:5,passages};
-const response=(data,usage={input_tokens:50,output_tokens:20})=>Response.json({output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(data)}]}],usage});
+const response=(data,usage={input_tokens:50,output_tokens:20})=>{
+  const wire=data.blocks&&!data.visual?{blocks:data.blocks.map(({text,kind,citations})=>({text,kind,segmentIds:citations.map(ref=>evidenceContext(passages).segments.find(e=>e.passageId===ref.passageId&&e.text===ref.quote)?.id??'foreign')}))}:data;
+  return Response.json({output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(wire)}]}],usage});
+};
 function provider(t){for(const key of ['LLM_PROVIDER','LLM_API_KEY','LLM_MODEL']){const old=process.env[key];t.after(()=>{if(old===undefined)delete process.env[key];else process.env[key]=old;});}process.env.LLM_PROVIDER='openai';process.env.LLM_API_KEY='synthetic';process.env.LLM_MODEL='gpt-5-mini';}
 
 test('contrats distincts : aucun exercice caché dans une explication',()=>{
