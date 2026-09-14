@@ -84,10 +84,11 @@ test('essential : trois cartes distinctes, unités exactes, citations serveur, a
       assert.equal(payload.segments[0].text,'Cours : Toumaï date de 7 Ma.');
       assert.doesNotMatch(JSON.stringify(payload),/Lucy|3 Ma/);
       const byText=text=>payload.segments.find(segment=>segment.text===text).id;
+      const slotFor=text=>payload.cardSlots.find(slot=>slot.segmentId===byText(text)).id;
       return response({blocks:[
-        {title:'Toumaï : 7 Ma',text:'Toumaï date de 7 Ma.',kind:'explanation',segmentIds:[byText('Cours : Toumaï date de 7 Ma.')]},
-        {title:'Berceau africain',text:'Le berceau se situe en Afrique.',kind:'explanation',segmentIds:[byText('Le berceau se situe en Afrique.')]},
-        {title:'Conséquence',text:'La sécheresse entraîne une migration.',kind:'explanation',segmentIds:[byText('La sécheresse entraîne une migration.')]},
+        {slotId:slotFor('Cours : Toumaï date de 7 Ma.'),title:'Toumaï : 7 Ma',text:'Toumaï date de 7 Ma.',kind:'explanation',segmentIds:[byText('Cours : Toumaï date de 7 Ma.')]},
+        {slotId:slotFor('Le berceau se situe en Afrique.'),title:'Berceau africain',text:'Le berceau se situe en Afrique.',kind:'explanation',segmentIds:[byText('Le berceau se situe en Afrique.')]},
+        {slotId:slotFor('La sécheresse entraîne une migration.'),title:'Conséquence',text:'La sécheresse entraîne une migration.',kind:'explanation',segmentIds:[byText('La sécheresse entraîne une migration.')]},
       ]});
     }
     assert.equal(payload.elements.length,3);

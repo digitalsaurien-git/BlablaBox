@@ -2,9 +2,10 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { LearningMode, Passage } from './learning-contract.ts';
 import { LearningFailure } from './learning-errors.ts';
+import { ambiguousTable, explicitDateRelation, flattenedPair, flattenedRows } from './flattened-evidence.ts';
 
-export const EVIDENCE_VERSION='evidence-1';
-export const ESSENTIAL_VERSION='essential-2';
+export const EVIDENCE_VERSION='evidence-2';
+export const ESSENTIAL_VERSION='essential-3';
 export const MAX_EVIDENCE_SEGMENTS=96;
 export const MAX_EVIDENCE_LENGTH=400;
 export type EvidenceCategory='course'|'answer'|'question'|'mixed';
@@ -18,7 +19,7 @@ const answerStart=/^(?:réponses?|correction|corrigé|solution)\s*(?:\d+\s*)?:/i
 const marker=/(?<!\p{L})(?:questions?|réponses?|correction|corrigé|solution|définition|date|cours)\s*(?:\d+\s*)?:/giu;
 const normalized=(text:string)=>text.normalize('NFC').toLocaleLowerCase('fr').replace(/\s+/g,' ').trim();
 const folded=(text:string)=>normalized(text).normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-const properNameStop=new Set(['cours','question','réponse','reponse','définition','definition','date','exercice','solution','correction','vrai','faux']);
+const properNameStop=new Set(['cours','question','réponse','reponse','définition','definition','date','dates','espece','especes','nom','noms','terme','notion','valeur','valeurs','exercice','solution','correction','vrai','faux','le','la','les','un','une']);
 
 export function essentialSubject(subject=''):EssentialSubject {
   const value=folded(subject);
@@ -51,7 +52,9 @@ export function essentialFacts(segments:EvidenceSegment[],subject=''):EssentialF
     const places=matches(text,/(?<![\p{L}\p{M}])((?:en|au|aux|à)\s+[\p{Lu}][\p{L}\p{M}’'-]{2,}(?:\s+[\p{Lu}][\p{L}\p{M}’'-]{2,})*)/gu,1);
     const kinds:EssentialKind[]=[];const labels:string[]=[];
     const add=(kind:EssentialKind,values:string[]=[])=>{if(!kinds.includes(kind))kinds.push(kind);labels.push(...values);};
-    if(names.length&&dates.length)add('association',[names[0],dates[0]]);
+    const pair=flattenedPair(text);
+    if(pair)add('association',[pair.term,pair.value]);
+    else if(names.length===1&&dates.length===1&&explicitDateRelation(text,names[0],dates[0]))add('association',[names[0],dates[0]]);
     if(dates.length)add('date',dates);
     if(units.some(value=>/\b(?:ans?|s(?:econdes?)?|min(?:utes?)?|h(?:eures?)?)\b/iu.test(value)))add('duration',units);
     if(names.length)add('proper-name',names);
@@ -97,12 +100,14 @@ export function buildEvidence(passages:Passage[]):EvidenceSegment[] {
   for(const p of passages) {
     if(ids.has(p.id))throw new LearningFailure('UNKNOWN_CITATION');
     ids.add(p.id);if(p.quality!=='verified')continue;
+    const rows=flattenedRows(p.text);
     const boundaries=new Set([0,p.text.length]);
+    for(const row of rows){boundaries.add(row.start);boundaries.add(row.end);}
     for(const m of p.text.matchAll(/(?:[.!?;](?=\s|$)|\r?\n+|[•●]\s*|(?<=\s)(?:[-–]\s+|\d+[.)]\s+))/gu)) {
       // Bullets and numbered labels belong to the next segment.
       boundaries.add(/[•●]|^[-–]|^\d/.test(m[0])?m.index:m.index+m[0].length);
     }
-    for(const m of p.text.matchAll(marker))boundaries.add(m.index);
+    for(const m of p.text.matchAll(marker))if(!rows.some(row=>m.index>row.start&&m.index<row.end))boundaries.add(m.index);
     const points=[...boundaries].sort((a,b)=>a-b);
     let context:EvidenceCategory='course';
     for(let i=0;i<points.length-1;i++) {
@@ -114,7 +119,8 @@ export function buildEvidence(passages:Passage[]):EvidenceSegment[] {
       const isAnswer=answerStart.test(raw),isQuestion=questionStart.test(raw)||raw.includes('?');
       const explicitCourse=/^(?:cours|définition|date)\s*:/iu.test(raw);
       if(isAnswer)context='answer';else if(isQuestion)context='question';else if(explicitCourse)context='course';
-      const category:EvidenceCategory=isAnswer&&raw.includes('?')?'mixed':isQuestion?'question':context;
+      const row=rows.some(row=>row.start===start&&row.end===end);
+      const category:EvidenceCategory=row?'answer':ambiguousTable(raw)?'mixed':isAnswer&&raw.includes('?')?'mixed':isQuestion?'question':context;
       // Keep question continuations quarantined until an explicit answer/course
       // marker. A declarative-looking option is not evidence of a correct answer.
       while(start<end) {

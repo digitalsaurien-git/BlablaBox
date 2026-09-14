@@ -134,6 +134,29 @@ test('navigateur réel : soumission, récupération et parcours du cours', {time
       await page.setViewportSize({width:390,height:844});
     });
 
+    await t.test('tableau PDF aplati : repère prioritaire visible, citation exacte et mobile',async()=>{
+      const anchors=await makeCourse(false);
+      const part=await db.coursePart.findFirstOrThrow({where:{courseThemeId:anchors.id,userId:ids[0]}});
+      const source='Quels noms portent les anciens parents de l’homme ? Quand ont-ils vécu ? Compétence : savoir remplir un tableau. espèces Toumai Dates 7 Ma. Cours : Le berceau se situe en Afrique. La sécheresse entraîne une migration.';
+      await importSource(db,{userId:ids[0],coursePartId:part.id,fileName:'synthetic-anchors.odt',declaredMime:'application/vnd.oasis.opendocument.text',bytes:syntheticOdt(source)});
+      await open(`/courses/${anchors.id}/understand`);
+      await page.getByRole('button',{name:'Montre-moi l’essentiel',exact:true}).click();
+      await page.waitForURL('**/content/*');
+      const cards=page.locator('#lecture section');assert.equal(await cards.count(),3);
+      const card=cards.filter({has:page.getByRole('heading',{name:'Toumai : 7 Ma',exact:true})});
+      assert.equal(await card.count(),1);
+      await card.getByText('Voir dans mon cours',{exact:true}).click();
+      await card.getByText('espèces Toumai Dates 7 Ma.',{exact:true}).last().waitFor();
+      const html=await page.content();
+      assert.doesNotMatch(html,/requiredTerms|requiredValue|slotId|EXPECTED_REVISION_CANARY/);
+      await page.setViewportSize({width:320,height:740});
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
+      await page.setViewportSize({width:390,height:844});
+      const version=await db.projectVersion.findFirstOrThrow({where:{courseThemeId:anchors.id,mode:'essential'}});
+      assert.equal(version.content.blocks.length,3);
+      assert.equal(await db.providerUsage.count({where:{userId:ids[0],operation:'ocr'}}),0);
+    });
+
     await t.test('erreur de lecture dans chacun des trois parcours et bouton réactivé',async()=>{
       for(const [route,label] of [['understand','Explique-moi simplement'],['revise?minutes=5','Quiz'],['homework','M’aider à commencer']]) {
         await open(`/courses/${imageOnly.id}/${route}`);
