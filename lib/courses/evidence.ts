@@ -82,7 +82,10 @@ export function orderEssentialSegments(segments:EvidenceSegment[],facts:Essentia
   const rank=new Map(facts.map((fact,index)=>[fact.segmentId,{priority:fact.priority,index}]));
   return [...segments].sort((a,b)=>{
     const left=rank.get(a.id),right=rank.get(b.id);
-    return (right?.priority??0)-(left?.priority??0)||(left?.index??Number.MAX_SAFE_INTEGER)-(right?.index??Number.MAX_SAFE_INTEGER);
+    // essentialFacts puts the highest-ranked distinct focuses first. Keep that
+    // deterministic order so selecting the first three segments preserves
+    // diversity; priority only orders facts after that selected prefix.
+    return (left?.index??Number.MAX_SAFE_INTEGER)-(right?.index??Number.MAX_SAFE_INTEGER)||(right?.priority??0)-(left?.priority??0);
   });
 }
 

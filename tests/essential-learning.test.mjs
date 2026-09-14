@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {validateActivity} from '../lib/courses/activity-contract.ts';
-import {essentialFacts,essentialSubject,evidenceContext} from '../lib/courses/evidence.ts';
-import {generateCourse} from '../lib/providers/llm/course-provider.ts';
+import {essentialFacts,essentialSubject,evidenceContext,orderEssentialSegments} from '../lib/courses/evidence.ts';
+import {generateCourse,mockCourse} from '../lib/providers/llm/course-provider.ts';
 
 const passage=(id,text)=>({id,text,quality:'verified',label:'Synthétique',method:'native'});
 const history=passage('history-owned','Cours : Toumaï date de 7 Ma. Le berceau se situe en Afrique. La sécheresse entraîne une migration. Question : Lucy est-elle associée à 3 Ma ?');
@@ -34,6 +34,36 @@ test('adaptation déterministe aux matières : histoire, mathématiques et langu
   const languageKinds=new Set(essentialFacts(language.segments,'Anglais').flatMap(fact=>fact.kinds));
   for(const kind of ['definition','method','formula'])assert.ok(mathKinds.has(kind),kind);
   for(const kind of ['vocabulary','rule'])assert.ok(languageKinds.has(kind),kind);
+});
+
+test('sélection essential : diversité stable avant priorité et repli avec une ou deux catégories',()=>{
+  const rich=evidenceContext([passage('rich',[
+    'Cours : Toumaï date de 7 Ma.',
+    'Cours : Lucy date de 3 Ma.',
+    'Cours : Néandertal date de 400 000 ans.',
+    'La sécheresse entraîne une migration.',
+    'Définition : Une migration est un déplacement de population.',
+  ].join(' '))]);
+  const richFacts=essentialFacts(rich.segments,'Histoire-Géographie');
+  const selected=orderEssentialSegments(rich.segments,richFacts).slice(0,3);
+  const focusBySegment=new Map(richFacts.map(fact=>[fact.segmentId,fact.focus]));
+  assert.equal(new Set(selected.map(segment=>focusBySegment.get(segment.id))).size,3);
+  assert.equal(focusBySegment.get(selected[0].id),'association');
+  assert.deepEqual(orderEssentialSegments(rich.segments,richFacts).map(segment=>segment.id),orderEssentialSegments(rich.segments,richFacts).map(segment=>segment.id));
+  const cards=mockCourse({mode:'essential',minutes:5,subject:'Histoire-Géographie',passages:[passage('rich-owned',rich.segments.map(segment=>segment.text).join(' '))]});
+  assert.equal(cards.blocks.length,3);
+  assert.equal(new Set(cards.blocks.map(block=>block.title)).size,3);
+
+  const one=evidenceContext([passage('one','Définition : une migration est un déplacement. Définition : une population est un groupe.')]);
+  const oneFacts=essentialFacts(one.segments,'Histoire-Géographie');
+  assert.deepEqual(orderEssentialSegments(one.segments,oneFacts).map(segment=>segment.id),orderEssentialSegments(one.segments,oneFacts).map(segment=>segment.id));
+  assert.equal(new Set(oneFacts.map(fact=>fact.focus)).size,1);
+  const toumai=evidenceContext([passage('toumai','Cours : Toumaï date de 7 Ma. La sécheresse entraîne une migration. Définition : une migration est un déplacement.')]);
+  const toumaiFacts=essentialFacts(toumai.segments,'Histoire-Géographie');
+  assert.equal(orderEssentialSegments(toumai.segments,toumaiFacts)[0].text,'Cours : Toumaï date de 7 Ma.');
+  const two=evidenceContext([passage('two','Cours : Toumaï date de 7 Ma. La sécheresse entraîne une migration.')]);
+  const twoFacts=essentialFacts(two.segments,'Histoire-Géographie');
+  assert.deepEqual(orderEssentialSegments(two.segments,twoFacts).slice(0,2).map(segment=>new Map(twoFacts.map(fact=>[fact.segmentId,fact.focus])).get(segment.id)),['association','consequence']);
 });
 
 test('essential : trois cartes distinctes, unités exactes, citations serveur, audit et deux appels seulement',async t=>{
