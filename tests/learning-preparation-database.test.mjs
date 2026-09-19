@@ -77,7 +77,7 @@ test('préparation automatique : concurrence, cache, pages images, refus et isol
       return {ok:true,json:()=>{queueMicrotask(()=>controller.abort(new DOMException('synthetic','TimeoutError')));return new Promise(()=>{});}};
     });
     const before={versions:await db.projectVersion.count({where:{userId:ids[0]}}),projects:await db.project.count({where:{userId:ids[0]}}),sessions:await db.learningSession.count({where:{userId:ids[0]}})};
-    await assert.rejects(prepareLearning(db,ids[0],course.id,'quiz',10),{message:LLM_TIMEOUT_MESSAGE});
+    await assert.rejects(prepareLearning(db,ids[0],course.id,'gap',10),{message:LLM_TIMEOUT_MESSAGE});
     assert.equal(calls,2);
     assert.equal(await db.projectVersion.count({where:{userId:ids[0]}}),before.versions);
     assert.equal(await db.project.count({where:{userId:ids[0]}}),before.projects);

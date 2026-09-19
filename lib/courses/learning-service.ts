@@ -11,6 +11,7 @@ import { getTTSProvider } from '../providers/tts/index.ts';
 import type { LearningTrace } from './learning-trace.ts';
 import { LearningFailure, failureUsage, withUsage } from './learning-errors.ts';
 import { ESSENTIAL_VERSION, EVIDENCE_VERSION, usesEvidence } from './evidence.ts';
+import { QUIZ_VERSION } from './quiz-contract.ts';
 
 export const COURSE_READING_REQUIRED='Aucun passage vérifié n’est encore disponible pour travailler ce cours.';
 
@@ -147,8 +148,8 @@ export async function prepareLearning(db:PrismaClient,userId:string,courseId:str
   const passages=snapshot.passages.filter(p=>p.quality==='verified');
   if(!passages.length)throw new Error(COURSE_READING_REQUIRED);
   if(passages.reduce((n,p)=>n+p.text.length,0)>60000)throw new LearningFailure('SOURCE_UNUSABLE');
-  const evidenceVersion=mode==='essential'?ESSENTIAL_VERSION:usesEvidence(mode)?EVIDENCE_VERSION:'learning-v1';
-  const key=digest(JSON.stringify([courseId,snapshot.fingerprint,...(mode==='essential'?[course.subject.title]:[]),mode,minutes,instruction,process.env.LLM_PROVIDER ?? 'mock',process.env.LLM_MODEL ?? 'gpt-5-mini',evidenceVersion]));
+  const evidenceVersion=mode==='quiz'?QUIZ_VERSION:mode==='essential'?ESSENTIAL_VERSION:usesEvidence(mode)?EVIDENCE_VERSION:'learning-v1';
+  const key=digest(JSON.stringify([courseId,snapshot.fingerprint,...(['essential','quiz'].includes(mode)?[course.subject.title]:[]),mode,minutes,instruction,process.env.LLM_PROVIDER ?? 'mock',process.env.LLM_MODEL ?? 'gpt-5-mini',evidenceVersion]));
   let version=await db.projectVersion.findUnique({where:{userId_cacheKey:{userId,cacheKey:key}}});
   if(!version) {
     const operation=await claim(db,userId,key,process.env.LLM_PROVIDER ?? 'mock','learning');const started=Date.now();

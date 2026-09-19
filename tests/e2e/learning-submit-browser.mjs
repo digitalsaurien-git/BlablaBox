@@ -214,6 +214,45 @@ test('navigateur réel : soumission, récupération et parcours du cours', {time
       for(const block of version.content.blocks)await page.getByText(block.text,{exact:true}).first().waitFor();
     });
 
+    await t.test('QCM complet : quatre questions, retour concis, clavier, mobile et fin de session',async()=>{
+      await open(coursePath+'/revise?minutes=5');doneAt=0;
+      await page.getByRole('button',{name:'Quiz',exact:true}).click();await page.waitForURL('**/session/*');
+      await page.getByRole('heading',{name:'Réviser',exact:true}).waitFor();
+      assert.ok(doneAt>0);const visibleAfter=Date.now()-doneAt;assert.ok(visibleAfter<5000);
+      console.log(JSON.stringify({scope:'quiz-navigation-test',event:'done-to-visible',durationMs:visibleAfter}));
+      const sessionId=new URL(page.url()).pathname.split('/').at(-1);
+      const session=await db.learningSession.findUniqueOrThrow({where:{id:sessionId},include:{projectVersion:true}});
+      assert.equal(session.projectVersion.content.questions.length,4);
+      for(let index=0;index<4;index++) {
+        const q=session.projectVersion.content.questions[index];
+        await page.getByRole('status').filter({hasText:`Question ${index+1} sur 4`}).waitFor();
+        assert.equal(await page.getByRole('radio').count(),3);
+        const html=await page.content();assert.equal(html.includes(q.explanation),false);
+        assert.doesNotMatch(html,/correctChoiceId|segmentIds|"expected"|Réponse attendue :/);
+        for(const width of [320,390]) {
+          await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+          for(const label of await page.locator('fieldset label').all())assert.ok((await label.boundingBox()).height>=48);
+        }
+        const correct=index!==1;
+        const selected=correct?q.expected[0]:q.choices.find(c=>c!==q.expected[0]);
+        const radio=page.getByRole('radio',{name:selected,exact:true});
+        await radio.focus();await page.keyboard.press('Space');assert.equal(await radio.isChecked(),true);
+        await page.getByRole('button',{name:'Vérifier ma réponse',exact:true}).focus();await page.keyboard.press('Enter');
+        const feedback=page.getByRole('status').filter({hasText:correct?'Bien joué !':'Ce n’est pas le bon choix.'});await feedback.waitFor();
+        assert.equal(await feedback.getByText(q.explanation,{exact:true}).count(),1);
+        assert.equal(await page.getByText('Ta réponse :',{exact:false}).count(),0);
+        if(correct)assert.equal(await page.getByText('Réponse attendue :',{exact:false}).count(),0);
+        else await feedback.getByText(`Réponse attendue : ${q.expected[0]}`,{exact:true}).waitFor();
+        assert.equal(await page.getByText('Voir dans mon cours',{exact:true}).count(),1);
+        const attempt=await db.learningAttempt.findFirstOrThrow({where:{sessionId,questionIndex:index}});assert.equal(attempt.correct,correct);assert.equal(attempt.feedback,q.explanation);
+        await page.getByRole('button',{name:'Question suivante',exact:true}).click();
+      }
+      await page.getByRole('heading',{name:'Révision terminée !',exact:true}).waitFor();
+      await page.getByText('Tu as travaillé 4 questions.',{exact:true}).waitFor();
+      assert.equal(await page.getByRole('radio').count(),0);
+      assert.equal((await db.learningSession.findUniqueOrThrow({where:{id:sessionId}})).position,4);
+    });
+
     await t.test('réponses et correction absentes du HTML avant tentative, même avec un ancien drapeau',async()=>{
       await open(coursePath+'/revise?minutes=5');
       await page.getByRole('button',{name:'Quiz',exact:true}).click();await page.waitForURL('**/session/*');
@@ -248,6 +287,9 @@ test('navigateur réel : soumission, récupération et parcours du cours', {time
       const tokenB=createSessionToken();await db.session.create({data:{userId:ids[1],tokenHash:hashSessionToken(tokenB),expiresAt:new Date(Date.now()+3600000)}});
       await context.clearCookies();await context.addCookies([{name:'__Host-blablabox_session',value:tokenB,url:base.replace("http:","https:"),secure:true,httpOnly:true,sameSite:'Lax'}]);
       const response=await page.goto(base+coursePath);assert.equal(response.status(),404);
+      const privateRevision=await db.learningSession.findFirstOrThrow({where:{userId:ids[0],kind:'revision'}});
+      const foreignSession=await page.goto(`${base}/courses/${privateRevision.courseThemeId}/session/${privateRevision.id}`);assert.equal(foreignSession.status(),404);
+      assert.doesNotMatch(await page.content(),/EXPECTED_REVISION_CANARY|FEEDBACK_CANARY|correctChoiceId/);
       const traceLines=logs.split(/\r?\n/).filter(line=>line.startsWith('{"scope":"course-learning"')).map(line=>JSON.parse(line));
       assert.ok(traceLines.some(l=>l.event==='action-start'));assert.ok(traceLines.some(l=>l.event==='transaction-start'));assert.ok(traceLines.some(l=>l.event==='done'));assert.ok(traceLines.some(l=>l.event==='failed'));
       const traces=JSON.stringify(traceLines);for(const value of [...ids,token,course.id,'synthetic.odt','Consigne synthétique','La germination','@example.invalid','EXPECTED_REVISION_CANARY','CORRECTION_HOMEWORK_CANARY','Tentative synthétique'])assert.equal(traces.includes(value),false);

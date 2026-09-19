@@ -51,7 +51,11 @@ export function validateGroundedOutput(raw:unknown, passages:Passage[], mode:Lea
   }
   for(const b of result.blocks) verify([b.title,b.text].filter(Boolean).join(' '),b.citations);
   for(const q of result.questions) {
-    verify([q.prompt,q.explanation,...q.choices,...q.expected,...q.variants].join(' '),q.citations,true);
+    // QCM distractors are false alternatives, not sourced assertions. Only the
+    // dedicated quiz pipeline may omit them here; its choice guards and semantic
+    // audit still run before publication. All correct answers remain verified.
+    verify([q.prompt,q.explanation,...(mode==='quiz'&&q.type==='mcq'?[]:q.choices),...q.expected,...q.variants].join(' '),q.citations,true);
+    if(q.choices.some(c=>/https?:\/\/|<\/?(?:script|iframe)|storageKey|DATABASE_URL/i.test(c)))throw new LearningFailure('INVALID_STRUCTURE');
     const quotes = q.citations.map(c=>normalizeAnswer(c.quote)).join(' ');
     if(new Set(q.choices.map(normalizeAnswer)).size!==q.choices.length) throw new Error('Question ambiguë.');
     if(q.type==='mcq' || q.type==='boolean') {

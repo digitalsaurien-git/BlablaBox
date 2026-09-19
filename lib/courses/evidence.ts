@@ -104,6 +104,11 @@ export function buildEvidence(passages:Passage[]):EvidenceSegment[] {
     const boundaries=new Set([0,p.text.length]);
     for(const row of rows){boundaries.add(row.start);boundaries.add(row.end);}
     for(const m of p.text.matchAll(/(?:[.!?;](?=\s|$)|\r?\n+|[•●]\s*|(?<=\s)(?:[-–]\s+|\d+[.)]\s+))/gu)) {
+      // A number ending a sentence ("le résultat vaut 6. Ensuite…") is not
+      // a list label. Keep it with its proof; numbered labels start a line.
+      if(/^\d+[.)]\s+/.test(m[0])&&p.text.slice(p.text.lastIndexOf('\n',m.index-1)+1,m.index).trim()) {
+        boundaries.add(m.index+m[0].trimEnd().length);continue;
+      }
       // Bullets and numbered labels belong to the next segment.
       boundaries.add(/[•●]|^[-–]|^\d/.test(m[0])?m.index:m.index+m[0].length);
     }
