@@ -13,7 +13,7 @@ export type EvidenceSegment={id:string;passageId:string;start:number;end:number;
 export type EssentialSubject='history-geography'|'mathematics'|'language'|'other';
 export type EssentialKind='association'|'date'|'duration'|'proper-name'|'definition'|'place'|'rule'|'method'|'formula'|'vocabulary'|'cause'|'consequence'|'step'|'value'|'notion';
 export type EssentialFact={segmentId:string;focus:EssentialKind;kinds:EssentialKind[];labels:string[];priority:number};
-export const usesEvidence=(mode:LearningMode)=>['explain','summary','essential'].includes(mode);
+export const usesEvidence=(mode:LearningMode)=>['explain','summary','essential','memo'].includes(mode);
 const questionStart=/^(?:(?:\d+[.)]\s*)?(?:questions?\b|exercices?\b|consigne\b|qui\b|que\b|quel\w*\b|comment\b|pourquoi\b|quand\b|où\b|cite\b|donne\b|explique\b|complète\b|répond\w*\b|indique\b|compare\b|nomme\b|relève\b))/iu;
 const answerStart=/^(?:réponses?|correction|corrigé|solution)\s*(?:\d+\s*)?:/iu;
 const marker=/(?<!\p{L})(?:questions?|réponses?|correction|corrigé|solution|définition|date|cours)\s*(?:\d+\s*)?:/giu;
@@ -153,7 +153,7 @@ export function factualEvidence(segments:EvidenceSegment[]) {
 }
 const evidenceBlock=z.object({title:z.string().min(1).max(60).optional(),text:z.string().min(1).max(450),kind:z.enum(['explanation','example']),segmentIds:z.array(z.string().min(1)).min(1).max(2)}).strict();
 const essentialEvidenceBlock=evidenceBlock.extend({title:z.string().min(1).max(60)});
-export const evidenceSchema=(mode:LearningMode,minimum:1|2=1)=>z.object({blocks:z.array(mode==='essential'?essentialEvidenceBlock:evidenceBlock).min(minimum).max(mode==='summary'?2:3)}).strict();
+export const evidenceSchema=(mode:LearningMode,minimum:1|2=1)=>z.object({blocks:z.array(['essential','memo'].includes(mode)?essentialEvidenceBlock:evidenceBlock).min(minimum).max(mode==='summary'?2:mode==='memo'?8:3)}).strict();
 
 // Rebuild the catalog from the trusted snapshot, never from model coordinates.
 export function evidenceContext(passages:Passage[]) {

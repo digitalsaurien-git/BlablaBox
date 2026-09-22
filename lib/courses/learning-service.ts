@@ -149,7 +149,7 @@ export async function prepareLearning(db:PrismaClient,userId:string,courseId:str
   if(!passages.length)throw new Error(COURSE_READING_REQUIRED);
   if(passages.reduce((n,p)=>n+p.text.length,0)>60000)throw new LearningFailure('SOURCE_UNUSABLE');
   const evidenceVersion=mode==='quiz'?QUIZ_VERSION:mode==='essential'?ESSENTIAL_VERSION:usesEvidence(mode)?EVIDENCE_VERSION:'learning-v1';
-  const key=digest(JSON.stringify([courseId,snapshot.fingerprint,...(['essential','quiz'].includes(mode)?[course.subject.title]:[]),mode,minutes,instruction,process.env.LLM_PROVIDER ?? 'mock',process.env.LLM_MODEL ?? 'gpt-5-mini',evidenceVersion]));
+  const key=digest(JSON.stringify([courseId,snapshot.fingerprint,...(['essential','quiz','memo'].includes(mode)?[course.subject.title]:[]),mode,minutes,instruction,process.env.LLM_PROVIDER ?? 'mock',process.env.LLM_MODEL ?? 'gpt-5-mini',evidenceVersion]));
   let version=await db.projectVersion.findUnique({where:{userId_cacheKey:{userId,cacheKey:key}}});
   if(!version) {
     const operation=await claim(db,userId,key,process.env.LLM_PROVIDER ?? 'mock','learning');const started=Date.now();

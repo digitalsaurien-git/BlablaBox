@@ -30,7 +30,7 @@ export async function startCourseLearning(form:FormData) {
   if(!MODES.includes(mode as LearningMode))redirect(coursePath(id));
   trace.activity?.(mode as LearningMode);
   const minutes=form.get('minutes')==='10'?10:5;
-  const path=mode==='homework'?'homework':['quiz','gap','order','mix'].includes(mode)?'revise':'understand';
+  const path=mode==='homework'?'homework':['quiz','gap','order','mix','memo'].includes(mode)?'revise':'understand';
   let result;
   try {result=await prepareLearning(prisma,user.id,id,mode as LearningMode,minutes,field(form,'instruction'),trace);}
   catch(error){trace.failed(error);revalidatePath(coursePath(id));redirect(`${coursePath(id)}/${path}?error=${code(error)}&activity=${encodeURIComponent(mode)}${path==='revise'?`&minutes=${minutes}`:''}`);}
