@@ -10,6 +10,7 @@ export const essentialSchema=z.object({blocks:z.array(essentialBlock).min(1).max
 export const memoSchema=z.object({blocks:z.array(essentialBlock).min(1).max(8)}).strict();
 export const flashcardsSchema=z.object({blocks:z.array(essentialBlock).min(1).max(10)}).strict();
 export const visualSchema=z.object({blocks:z.array(shortBlock).min(1).max(3),visual}).strict();
+export const mindMapSchema=z.object({visual:z.object({type:z.literal('mindmap'),title:z.string().min(1).max(120),items:z.array(visual.shape.items.element).min(7).max(31)}).strict()}).strict();
 export const revisionSchema=z.object({questions:z.array(question).min(1).max(8)}).strict();
 export const homeworkSchema=z.object({homework:learningSchema.shape.homework.unwrap()}).strict();
 export function activitySchema(mode:LearningMode) {
@@ -18,12 +19,13 @@ export function activitySchema(mode:LearningMode) {
   if(mode==='essential')return essentialSchema;
   if(mode==='memo')return memoSchema;
   if(mode==='flashcards')return flashcardsSchema;
+  if(mode==='mindmap')return mindMapSchema;
   if(mode==='visual')return visualSchema;
   if(mode==='homework')return homeworkSchema;
   return revisionSchema;
 }
 export const isEvaluation=(mode:LearningMode)=>['quiz','gap','order','mix','homework'].includes(mode);
-export const activityTitle=(mode:LearningMode)=>({explain:'Comprendre ton cours',summary:'Le résumé de ton cours',essential:'L’essentiel à retenir',memo:'Ta fiche mémo',flashcards:'Tes flashcards',visual:'Ton cours en visuel',homework:'Ton devoir, étape par étape'} as Record<string,string>)[mode]??'Réviser ton cours';
+export const activityTitle=(mode:LearningMode)=>({explain:'Comprendre ton cours',summary:'Le résumé de ton cours',essential:'L’essentiel à retenir',memo:'Ta fiche mémo',flashcards:'Tes flashcards',mindmap:'Ta carte mentale',visual:'Ton cours en visuel',homework:'Ton devoir, étape par étape'} as Record<string,string>)[mode]??'Réviser ton cours';
 export type ValidationReport={totalBlocks:number;acceptedBlocks:number;rejectedBlocks:number;codes:LearningErrorCode[]};
 export type ReportValidation=(report:ValidationReport)=>void;
 const shell=(mode:LearningMode):LearningOutput=>({title:activityTitle(mode),blocks:[],questions:[],visual:null,homework:null});
@@ -53,7 +55,7 @@ export function validateActivity(raw:unknown,passages:Passage[],mode:LearningMod
       throw failure;
     }
   }
-  if(!Array.isArray(allowed.blocks)&&mode!=='visual')throw new LearningFailure('INVALID_STRUCTURE');
+  if(!Array.isArray(allowed.blocks)&&!['visual','mindmap'].includes(mode))throw new LearningFailure('INVALID_STRUCTURE');
   const rawBlocks=Array.isArray(allowed.blocks)?allowed.blocks:[allowed.blocks];
   const stats:ValidationReport={totalBlocks:rawBlocks.length,acceptedBlocks:0,rejectedBlocks:0,codes:[]};
   const reject=(error:unknown)=>{stats.rejectedBlocks++;const code=learningErrorCode(error);if(!stats.codes.includes(code))stats.codes.push(code);};
@@ -73,7 +75,7 @@ export function validateActivity(raw:unknown,passages:Passage[],mode:LearningMod
       output.blocks.push(validateGroundedOutput(candidate,owned,'explain').blocks[0]);stats.acceptedBlocks++;
     } catch(error){reject(error);}
   }
-  if(mode==='visual') {
+  if(mode==='visual'||mode==='mindmap') {
     const envelope=z.object({type:visual.shape.type,title:visual.shape.title,items:z.array(z.unknown())}).safeParse(allowed.visual);
     if(envelope.success) {
       const items:NonNullable<LearningOutput['visual']>['items']=[];const remap=new Map<number,number>();
@@ -81,7 +83,7 @@ export function validateActivity(raw:unknown,passages:Passage[],mode:LearningMod
         stats.totalBlocks++;
         try {
           const parsed=visual.shape.items.element.safeParse(item);
-          if(!parsed.success||index>=10)throw new LearningFailure('INVALID_STRUCTURE');
+          if(!parsed.success||index>=(mode==='mindmap'?31:10))throw new LearningFailure('INVALID_STRUCTURE');
           const value=parsed.data;
           if(value.parent>=index||value.parent>=0&&!remap.has(value.parent))throw new LearningFailure('INVALID_STRUCTURE');
           validateGroundedOutput({...shell(mode),blocks:[{text:value.label+' '+value.detail,kind:'explanation',citations:value.citations}]},owned,'explain');
@@ -91,7 +93,17 @@ export function validateActivity(raw:unknown,passages:Passage[],mode:LearningMod
       });
       // A single supported item remains useful; the persisted representation is
       // textual when a diagram no longer has two connected items.
-      if(items.length>=2)output.visual={type:envelope.data.type,title:activityTitle(mode),items};
+      if(mode==='mindmap') {
+        const central=items.filter(item=>item.parent===-1);
+        const centralIndex=items.findIndex(item=>item.parent===-1);
+        const branches=items.filter(item=>item.parent===centralIndex);
+        const leaves=items.filter(item=>item.parent>=0&&item.parent!==centralIndex);
+        const labels=new Set(items.map(item=>item.label.normalize('NFC').toLocaleLowerCase('fr').replace(/\s+/g,' ').trim()));
+        const branchIndexes=new Set(branches.map(branch=>items.indexOf(branch)));
+        const counts=[...branchIndexes].map(index=>leaves.filter(leaf=>leaf.parent===index).length);
+        if(central.length!==1||branches.length<3||branches.length>6||leaves.length===0||leaves.some(leaf=>!branchIndexes.has(leaf.parent))||counts.some(count=>count<1||count>4)||labels.size!==items.length)throw new LearningFailure('INVALID_STRUCTURE');
+        output.visual={type:'mindmap',title:activityTitle(mode),items};
+      } else if(items.length>=2)output.visual={type:envelope.data.type,title:activityTitle(mode),items};
       else if(items.length===1)output.blocks.push({text:items[0].label+' : '+items[0].detail,kind:'explanation',citations:items[0].citations});
     } else {stats.totalBlocks++;reject(new LearningFailure('INVALID_STRUCTURE'));}
   }

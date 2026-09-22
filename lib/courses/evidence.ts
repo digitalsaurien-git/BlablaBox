@@ -13,7 +13,7 @@ export type EvidenceSegment={id:string;passageId:string;start:number;end:number;
 export type EssentialSubject='history-geography'|'mathematics'|'language'|'other';
 export type EssentialKind='association'|'date'|'duration'|'proper-name'|'definition'|'place'|'rule'|'method'|'formula'|'vocabulary'|'cause'|'consequence'|'step'|'value'|'notion';
 export type EssentialFact={segmentId:string;focus:EssentialKind;kinds:EssentialKind[];labels:string[];priority:number};
-export const usesEvidence=(mode:LearningMode)=>['explain','summary','essential','memo','flashcards'].includes(mode);
+export const usesEvidence=(mode:LearningMode)=>['explain','summary','essential','memo','flashcards','mindmap'].includes(mode);
 const questionStart=/^(?:(?:\d+[.)]\s*)?(?:questions?\b|exercices?\b|consigne\b|qui\b|que\b|quel\w*\b|comment\b|pourquoi\b|quand\b|où\b|cite\b|donne\b|explique\b|complète\b|répond\w*\b|indique\b|compare\b|nomme\b|relève\b))/iu;
 const answerStart=/^(?:réponses?|correction|corrigé|solution)\s*(?:\d+\s*)?:/iu;
 const marker=/(?<!\p{L})(?:questions?|réponses?|correction|corrigé|solution|définition|date|cours)\s*(?:\d+\s*)?:/giu;
@@ -153,14 +153,16 @@ export function factualEvidence(segments:EvidenceSegment[]) {
 }
 const evidenceBlock=z.object({title:z.string().min(1).max(60).optional(),text:z.string().min(1).max(450),kind:z.enum(['explanation','example']),segmentIds:z.array(z.string().min(1)).min(1).max(2)}).strict();
 const essentialEvidenceBlock=evidenceBlock.extend({title:z.string().min(1).max(60)});
-export const evidenceSchema=(mode:LearningMode,minimum:1|2=1)=>z.object({blocks:z.array(['essential','memo','flashcards'].includes(mode)?essentialEvidenceBlock:evidenceBlock).min(minimum).max(mode==='summary'?2:['memo','flashcards'].includes(mode)?10:3)}).strict();
+const mindMapItem=z.object({label:z.string().min(1).max(160),detail:z.string().max(300),parent:z.number().int().min(-1).max(30),segmentIds:z.array(z.string().min(1)).min(1).max(2)}).strict();
+const mindMapEvidenceSchema=z.object({visual:z.object({type:z.literal('mindmap'),title:z.string().min(1).max(120),items:z.array(mindMapItem).min(7).max(31)}).strict()}).strict();
+export const evidenceSchema=(mode:LearningMode,minimum:1|2=1)=>mode==='mindmap'?mindMapEvidenceSchema:z.object({blocks:z.array(['essential','memo','flashcards'].includes(mode)?essentialEvidenceBlock:evidenceBlock).min(minimum).max(mode==='summary'?2:['memo','flashcards'].includes(mode)?10:3)}).strict();
 
 // Rebuild the catalog from the trusted snapshot, never from model coordinates.
 export function evidenceContext(passages:Passage[]) {
   const owned=passages.map(p=>({...p}));
   const segments=factualEvidence(buildEvidence(owned));
   const byId=new Map(segments.map(e=>[e.id,e]));const byPassage=new Map(owned.map(p=>[p.id,p]));
-  return {segments,resolve(raw:unknown) {
+  const resolve=(raw:unknown) => {
     const parsed=evidenceBlock.safeParse(raw);if(!parsed.success)throw new LearningFailure('INVALID_STRUCTURE');
     const {title,text,kind,segmentIds}=parsed.data;
     const citations=[...new Set(segmentIds)].map(id=>{
@@ -169,6 +171,13 @@ export function evidenceContext(passages:Passage[]) {
       return {passageId:p.id,quote:p.text.slice(e.start,e.end)};
     });
     return {...(title?{title}:{}),text,kind,citations};
+  };
+  return {segments,resolve,resolveMindMap(raw:unknown) {
+    const parsed=mindMapEvidenceSchema.safeParse(raw);if(!parsed.success)throw new LearningFailure('INVALID_STRUCTURE');
+    return {visual:{...parsed.data.visual,items:parsed.data.visual.items.map(item=>{
+      const resolved=resolve({text:item.label+(item.detail?` ${item.detail}`:''),kind:'explanation',segmentIds:item.segmentIds});
+      return {label:item.label,detail:item.detail,parent:item.parent,citations:resolved.citations};
+    })}};
   }};
 }
 

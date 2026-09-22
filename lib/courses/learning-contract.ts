@@ -12,7 +12,7 @@ export const question = z.object({
 }).strict();
 export const visual = z.object({
   type:z.enum(['timeline','concepts','steps','comparison','mindmap']),
-  title:z.string().max(120),items:z.array(z.object({label:z.string().min(1).max(160),detail:z.string().max(300),parent:z.number().int().min(-1).max(9),citations:refs}).strict()).min(2).max(10),
+  title:z.string().max(120),items:z.array(z.object({label:z.string().min(1).max(160),detail:z.string().max(300),parent:z.number().int().min(-1).max(30),citations:refs}).strict()).min(2).max(31),
 }).strict();
 export const learningSchema = z.object({
   title:z.string().min(1).max(160),blocks:z.array(block).min(1).max(8),
@@ -23,7 +23,7 @@ export const learningSchema = z.object({
 export type LearningOutput = z.infer<typeof learningSchema>;
 export type Question = LearningOutput['questions'][number];
 export type Passage = {id:string;text:string;quality:string;label:string;method:string};
-export const MODES = ['explain','summary','essential','memo','flashcards','visual','quiz','gap','order','mix','homework'] as const;
+export const MODES = ['explain','summary','essential','memo','flashcards','mindmap','visual','quiz','gap','order','mix','homework'] as const;
 export type LearningMode = typeof MODES[number];
 export const normalizeAnswer = (s:string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/−/g,'-').replace(/[^a-z0-9+*/=<>^%,.\-]+/g,' ').replace(/[. ]+$/g,'').trim();
 export const insufficient = 'Je ne peux pas le vérifier avec ce cours.';
@@ -92,7 +92,7 @@ export function validateGroundedOutput(raw:unknown, passages:Passage[], mode:Lea
   if(mode==='gap' && result.questions.some(q=>q.type!=='gap')) throw new Error('Format incorrect.');
   if(mode==='order' && result.questions.some(q=>q.type!=='order')) throw new Error('Format incorrect.');
   if(mode==='quiz' && result.questions.some(q=>!['mcq','boolean'].includes(q.type))) throw new Error('Format incorrect.');
-  if(mode==='visual' && !result.visual) throw new Error(insufficient);
+  if(['visual','mindmap'].includes(mode) && !result.visual) throw new Error(insufficient);
   if(mode==='homework' && !result.homework) throw new Error(insufficient);
   return result;
 }
