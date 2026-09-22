@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { quizContext, quizSchema, validateQuizChoices, assertQuizAudit } from '../lib/courses/quiz-contract.ts';
+import { failureDiagnostics, QUIZ_REJECTED_PRODUCTION_MESSAGE, rejectedProductionMessage } from '../lib/courses/learning-errors.ts';
 import { validateActivity } from '../lib/courses/activity-contract.ts';
 import { gradeQuestion, publicQuestion } from '../lib/courses/learning-contract.ts';
 import { generateCourse, conciseOptions } from '../lib/providers/llm/course-provider.ts';
@@ -55,15 +56,15 @@ test('contrat minimal : nombre exact, IDs uniques, doublons et réponses trop lo
     const raw=structuredClone(f.raw);mutate(raw);assert.throws(()=>f.plan.resolve(raw));
   }
   const questions=f.plan.resolve(f.raw).questions;
-  const biased=questions.map((q,i)=>({...q,choices:['a','b','Bonne réponse'],expected:['Bonne réponse'],prompt:`Question ${i}`}));
-  assert.throws(()=>validateQuizChoices(biased),{code:'INVALID_STRUCTURE'});
+  const biased=questions.map((q,i)=>({...q,choices:['réponse A','réponse B','bonne réponse'],expected:['bonne réponse'],prompt:`Question ${i}`}));
+  assert.throws(()=>validateQuizChoices(biased),{code:'QUIZ_CORRECT_CHOICE_BIAS'});
 });
 
 test('géographie : continents et échelles incohérentes refusés pour une région d’Afrique',()=>{
   const f=quizFixture();
   for(const wrong of ['Asie','Europe','France','Afrique']) {
     const raw=structuredClone(f.raw);raw.questions[0].choices[1].text=wrong;
-    assert.throws(()=>f.plan.resolve(raw),{code:'INVALID_STRUCTURE'});
+    assert.throws(()=>f.plan.resolve(raw),{code:'QUIZ_CHOICE_LENGTH_MISMATCH'});
   }
 });
 
@@ -93,7 +94,7 @@ test('questions sans réponse, preuves incertaines, étrangères ou citations fo
   assert.throws(()=>quizContext([{...f.passages[0],text:'Quand la cité a-t-elle été fondée ?'}],5),{code:'SOURCE_UNUSABLE'});
   assert.throws(()=>quizContext(f.passages.map(p=>({...p,quality:'uncertain'})),5),{code:'SOURCE_UNUSABLE'});
   const foreign=quizContext(f.passages.map(p=>({...p,id:'other-account-'+p.id})),5);
-  assert.throws(()=>foreign.resolve(f.raw),{code:'UNKNOWN_CITATION'});
+  assert.throws(()=>foreign.resolve(f.raw),{code:'QUIZ_EVIDENCE_INVALID'});
   const quote=structuredClone(f.raw);quote.questions[0].citations=[{passageId:'invented',quote:'invented'}];assert.throws(()=>f.plan.resolve(quote));
 });
 
@@ -101,10 +102,30 @@ test('audit : ambiguïté, distracteur absurde, fait non étayé ou index manqua
   for(const field of ['supported','unambiguous','plausible','duplicate'])await t.test(field,async t=>{
     const f=quizFixture();const bad=structuredClone(f.audit);
     if(field==='duplicate')bad.decisions[1].index=0;else bad.decisions[2][field]=false;
-    assert.throws(()=>assertQuizAudit(bad,4),{code:'AUDIT_REJECTED'});
+    assert.throws(()=>assertQuizAudit(bad,4),{code:'QUIZ_AUDIT_REJECTED'});
     let calls=0;fakeProvider(t,async()=>wire(++calls===1?f.raw:bad));
-    await assert.rejects(generateCourse(f.input),{code:'AUDIT_REJECTED'});assert.equal(calls,2);
+    await assert.rejects(generateCourse(f.input),{code:'QUIZ_AUDIT_REJECTED'});assert.equal(calls,2);
   });
+});
+
+test('diagnostics QCM : chaque famille garde une catégorie publique et ne conserve que des métriques bornées',()=>{
+  const f=quizFixture();const maths=quizFixture('Mathématiques');
+  const cases=[
+    [raw=>{raw.questions.pop();},'QUIZ_QUESTION_COUNT_INVALID'],
+    [raw=>{raw.questions[0].choices[1].id='a';},'QUIZ_CHOICE_ID_DUPLICATE'],
+    [raw=>{raw.questions[0].choices[1].text=raw.questions[0].choices[0].text;},'QUIZ_CHOICE_DUPLICATE'],
+    [raw=>{raw.questions[0].choices[1].text='10 kg';},'QUIZ_NUMERIC_UNIT_INVALID',maths],
+  ];
+  for(const [mutate,code,fixture=f] of cases) {
+    const raw=structuredClone(fixture.raw);mutate(raw);let error;
+    try {fixture.plan.resolve(raw);}catch(value){error=value;}
+    assert.equal(error?.code,code);const metadata=failureDiagnostics(error);
+    assert.equal(metadata.failurePhase==='contract-resolution'||metadata.failurePhase==='deterministic-validation',true);
+    assert.equal(JSON.stringify(metadata).includes('synthetic'),false);
+    assert.ok(Number.isSafeInteger(metadata.questionOrdinal??0)||code==='QUIZ_QUESTION_COUNT_INVALID');
+  }
+  assert.equal(rejectedProductionMessage('quiz'),QUIZ_REJECTED_PRODUCTION_MESSAGE);
+  assert.match(rejectedProductionMessage('explain'),/explication/i);
 });
 
 test('QCM : budget global couvre les deux appels et leurs corps, sans troisième requête',async t=>{

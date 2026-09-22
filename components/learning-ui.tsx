@@ -4,12 +4,12 @@ import { ContinuousAudioPlayer } from './continuous-audio-player';
 import { createLearningAudio } from '@/app/courses/learning-actions';
 import { getStoredAudioPlayback, storedAudioExists } from '@/lib/audio-storage';
 import type { LearningOutput } from '@/lib/courses/learning-contract';
-import { REJECTED_PRODUCTION_MESSAGE } from '@/lib/courses/learning-errors';
+import { rejectedProductionMessage } from '@/lib/courses/learning-errors';
 export const learningButton='inline-flex min-h-12 items-center justify-center rounded-xl bg-moss px-5 py-3 text-center text-base font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-moss disabled:opacity-50';
 export const learningPanel='grid min-w-0 gap-4 rounded-2xl border border-ink/10 bg-white p-4 sm:p-6';
-export function LearningPreparationError({code,courseId}:{code?:string;courseId:string}) {
+export function LearningPreparationError({code,courseId,activity}:{code?:string;courseId:string;activity?:string}) {
   if(!code)return null;
-  if(code==='generation')return <p role="alert" className="rounded-xl bg-amber-50 p-4 text-amber-950">{REJECTED_PRODUCTION_MESSAGE}</p>;
+  if(code==='generation')return <p role="alert" className="rounded-xl bg-amber-50 p-4 text-amber-950">{rejectedProductionMessage(activity)}</p>;
   if(code==='reading')return <div role="alert" className={learningPanel}><p>Je n’arrive pas encore à lire assez de texte pour cette activité. Tu peux améliorer la lecture des pages en images ou ajouter un document plus lisible.</p><Link className="text-moss underline" href={`/courses/${courseId}#course-reading`}>Améliorer la lecture du cours</Link></div>;
   return <LearningError code={code}/>;
 }

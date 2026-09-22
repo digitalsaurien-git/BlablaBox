@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { evidenceContext, essentialSubject } from './evidence.ts';
 import { normalizeAnswer, type Passage, type Question } from './learning-contract.ts';
-import { LearningFailure } from './learning-errors.ts';
+import { LearningFailure, withDiagnostics, type LearningErrorCode, type LearningFailureDiagnostics } from './learning-errors.ts';
 
 export const QUIZ_VERSION='quiz-2';
 export const quizCount=(minutes:5|10)=>minutes===5?4:8;
@@ -25,10 +25,42 @@ export const QUIZ_AUDIT_INSTRUCTIONS=[
   'Renvoie une décision pour chaque index, sans texte supplémentaire. En cas de doute, false.',
 ].join('\n');
 export const quizAuditSchema=(count:number)=>z.object({decisions:z.array(z.object({index:z.number().int().min(0).max(count-1),supported:z.boolean(),unambiguous:z.boolean(),plausible:z.boolean()}).strict()).length(count)}).strict();
+function quizFailure(code:Extract<LearningErrorCode,`QUIZ_${string}`>,diagnostics:LearningFailureDiagnostics={}) {
+  return withDiagnostics(new LearningFailure(code),diagnostics);
+}
+function choiceMetrics(question:unknown,ordinal:number):LearningFailureDiagnostics {
+  const choices=question&&typeof question==='object'&&Array.isArray((question as {choices?:unknown}).choices)?(question as {choices:unknown[]}).choices:[];
+  const texts=choices.map(choice=>choice&&typeof choice==='object'&&typeof (choice as {text?:unknown}).text==='string'?(choice as {text:string}).text:'');
+  const ids=choices.map(choice=>choice&&typeof choice==='object'&&typeof (choice as {id?:unknown}).id==='string'?(choice as {id:string}).id:'');
+  const lengths=texts.map(text=>text.length);
+  return {failurePhase:'contract-resolution',questionOrdinal:ordinal,choicesReceived:choices.length,choicesExpected:3,distinctChoiceIds:new Set(ids).size,minChoiceLength:lengths.length?Math.min(...lengths):0,maxChoiceLength:lengths.length?Math.max(...lengths):0};
+}
+function preflightQuiz(raw:unknown,minutes:5|10):void {
+  if(!raw||typeof raw!=='object'||Array.isArray(raw)||!Array.isArray((raw as {questions?:unknown}).questions))throw quizFailure('QUIZ_JSON_CONTRACT_INVALID',{failurePhase:'parsing'});
+  const questions=(raw as {questions:unknown[]}).questions,expected=quizCount(minutes);
+  if(questions.length!==expected)throw quizFailure('QUIZ_QUESTION_COUNT_INVALID',{failurePhase:'contract-resolution',questionsReceived:questions.length,questionsExpected:expected});
+  for(const [index,question] of questions.entries()) {
+    const ordinal=index+1,base={failurePhase:'contract-resolution' as const,questionOrdinal:ordinal,questionsReceived:questions.length,questionsExpected:expected};
+    if(!question||typeof question!=='object'||Array.isArray(question))throw quizFailure('QUIZ_JSON_CONTRACT_INVALID',base);
+    const value=question as {prompt?:unknown;choices?:unknown;correctChoiceId?:unknown;explanation?:unknown;segmentIds?:unknown};
+    if(typeof value.prompt!=='string'||value.prompt.length<1||value.prompt.length>240)throw quizFailure('QUIZ_QUESTION_PROMPT_INVALID',base);
+    if(!Array.isArray(value.choices)||value.choices.length!==3)throw quizFailure('QUIZ_CHOICE_COUNT_INVALID',{...base,...choiceMetrics(question,ordinal)});
+    const metrics=choiceMetrics(question,ordinal);
+    for(const choiceValue of value.choices) {
+      if(!choiceValue||typeof choiceValue!=='object'||Array.isArray(choiceValue)||typeof (choiceValue as {id?:unknown}).id!=='string'||!['a','b','c'].includes((choiceValue as {id:string}).id))throw quizFailure('QUIZ_CHOICE_ID_INVALID',metrics);
+      if(typeof (choiceValue as {text?:unknown}).text!=='string'||(choiceValue as {text:string}).text.length<1||(choiceValue as {text:string}).text.length>120)throw quizFailure('QUIZ_CHOICE_TEXT_INVALID',metrics);
+    }
+    if(new Set(value.choices.map(choice=>(choice as {id:string}).id)).size!==3)throw quizFailure('QUIZ_CHOICE_ID_DUPLICATE',metrics);
+    if(typeof value.correctChoiceId!=='string'||!['a','b','c'].includes(value.correctChoiceId)||!value.choices.some(choice=>(choice as {id:string}).id===value.correctChoiceId))throw quizFailure('QUIZ_CORRECT_CHOICE_INVALID',metrics);
+    if(typeof value.explanation!=='string'||value.explanation.length<1||value.explanation.length>280)throw quizFailure('QUIZ_EXPLANATION_INVALID',base);
+    if(!Array.isArray(value.segmentIds)||value.segmentIds.length<1||value.segmentIds.length>2||value.segmentIds.some(id=>typeof id!=='string'||!id.length))throw quizFailure('QUIZ_EVIDENCE_INVALID',{...base,evidenceReferenceCount:Array.isArray(value.segmentIds)?value.segmentIds.length:0});
+    if(new Set(value.segmentIds).size!==value.segmentIds.length)throw quizFailure('QUIZ_EVIDENCE_DUPLICATE',{...base,evidenceReferenceCount:value.segmentIds.length});
+  }
+}
 export function assertQuizAudit(raw:unknown,count:number) {
   const parsed=quizAuditSchema(count).safeParse(raw);
-  if(!parsed.success)throw new LearningFailure('INVALID_STRUCTURE');
-  if(new Set(parsed.data.decisions.map(d=>d.index)).size!==count||parsed.data.decisions.some(d=>!d.supported||!d.unambiguous||!d.plausible))throw new LearningFailure('AUDIT_REJECTED');
+  if(!parsed.success)throw quizFailure('QUIZ_AUDIT_CONTRACT_INVALID',{failurePhase:'audit',questionsExpected:count,questionsReceived:raw&&typeof raw==='object'&&Array.isArray((raw as {decisions?:unknown}).decisions)?(raw as {decisions:unknown[]}).decisions.length:0});
+  if(new Set(parsed.data.decisions.map(d=>d.index)).size!==count||parsed.data.decisions.some(d=>!d.supported||!d.unambiguous||!d.plausible))throw quizFailure('QUIZ_AUDIT_REJECTED',{failurePhase:'audit',questionsExpected:count,questionsReceived:parsed.data.decisions.length});
 }
 
 // Bounded lexical guards complement, rather than replace, the semantic audit.
@@ -38,42 +70,45 @@ export function validateQuizChoices(questions:Question[]) {
     const match=value.normalize('NFC').trim().toLowerCase().match(/^([-+]?\d+(?:[.,]\d+)?)\s*([\p{L}%°²³/ ]*)$/u);
     return match?{value:Number(match[1].replace(',','.')),unit:match[2].replace(/\s+/g,' ').trim()}:null;
   };
-  for(const q of questions) {
-    if(q.type!=='mcq'||q.choices.length!==3||q.expected.length!==1)throw new LearningFailure('INVALID_STRUCTURE');
+  for(const [index,q] of questions.entries()) {
+    const ordinal=index+1,metrics={failurePhase:'deterministic-validation' as const,questionOrdinal:ordinal,questionsReceived:questions.length,questionsExpected:questions.length,choicesReceived:q.choices.length,choicesExpected:3,distinctChoiceIds:q.choices.length};
+    if(q.type!=='mcq'||q.choices.length!==3||q.expected.length!==1)throw quizFailure('QUIZ_CHOICE_COUNT_INVALID',metrics);
     const values=q.choices.map(normalizeAnswer);const correct=normalizeAnswer(q.expected[0]);
-    if(prompts.has(normalizeAnswer(q.prompt))||new Set(values).size!==3||values.filter(v=>v===correct).length!==1)throw new LearningFailure('INVALID_STRUCTURE');
+    if(prompts.has(normalizeAnswer(q.prompt)))throw quizFailure('QUIZ_QUESTION_DUPLICATE',metrics);
+    if(new Set(values).size!==3)throw quizFailure('QUIZ_CHOICE_DUPLICATE',metrics);
+    if(values.filter(v=>v===correct).length!==1)throw quizFailure('QUIZ_CORRECT_CHOICE_INVALID',metrics);
     prompts.add(normalizeAnswer(q.prompt));
-    if(q.choices.some(v=>/https?:\/\/|<\/?(?:script|iframe)|storageKey|DATABASE_URL/i.test(v)))throw new LearningFailure('INVALID_STRUCTURE');
+    if(q.choices.some(v=>/https?:\/\/|<\/?(?:script|iframe)|storageKey|DATABASE_URL/i.test(v)))throw quizFailure('QUIZ_CHOICE_TEXT_INVALID',metrics);
     const lengths=values.map(v=>v.length);
-    if(Math.max(...lengths)>Math.max(12,Math.min(...lengths)*3))throw new LearningFailure('INVALID_STRUCTURE');
+    if(Math.max(...lengths)>Math.max(12,Math.min(...lengths)*3))throw quizFailure('QUIZ_CHOICE_LENGTH_MISMATCH',{...metrics,minChoiceLength:Math.min(...lengths),maxChoiceLength:Math.max(...lengths)});
     const others=values.filter(v=>v!==correct);
     if(others.every(v=>correct.length>v.length*1.2))longest++;
     const prompt=normalizeAnswer(q.prompt);
     if(/\b(?:region|partie|zone)s?\b/.test(prompt)&&/\bafrique\b/.test(prompt)) {
       const region=/^(?:en |l |le |au |dans |d )*(?:afrique (?:de l |du |de |d )?(?:est|ouest|nord|sud|centrale|orientale|occidentale|australe)|(?:est|ouest|nord|sud|centre)(?: et (?:est|ouest|nord|sud|centre))? (?:de l |d )afrique)(?: et (?:du |de l )?(?:est|ouest|nord|sud))?$/;
-      if(values.some(v=>!region.test(v)))throw new LearningFailure('INVALID_STRUCTURE');
+      if(values.some(v=>!region.test(v)))throw quizFailure('QUIZ_DISTRACTOR_CATEGORY_INVALID',metrics);
     }
     // A numeric answer requires numeric alternatives of the same unit. False
     // numeric alternatives deliberately need not occur in the source.
     const number=numericValue(q.expected[0]);
     if(number) {
       const numbers=q.choices.map(numericValue);
-      if(numbers.some(v=>!v||v.unit!==number.unit)||new Set(numbers.map(v=>v?.value)).size!==3)throw new LearningFailure('INVALID_STRUCTURE');
+      if(numbers.some(v=>!v||v.unit!==number.unit)||new Set(numbers.map(v=>v?.value)).size!==3)throw quizFailure('QUIZ_NUMERIC_UNIT_INVALID',metrics);
     }
   }
-  if(questions.length>=4&&longest===questions.length)throw new LearningFailure('INVALID_STRUCTURE');
+  if(questions.length>=4&&longest===questions.length)throw quizFailure('QUIZ_CORRECT_CHOICE_BIAS',{failurePhase:'deterministic-validation',questionsReceived:questions.length,questionsExpected:questions.length});
 }
 
 export function quizContext(passages:Passage[],minutes:5|10,subject?:string) {
   const context=evidenceContext(passages);
   if(!context.segments.length)throw new LearningFailure('SOURCE_UNUSABLE');
   return {context,schema:quizSchema(minutes),input:{subjectProfile:essentialSubject(subject),questionCount:quizCount(minutes),segments:context.segments.map(({id,text,category})=>({id,text,category}))},resolve(raw:unknown) {
+    preflightQuiz(raw,minutes);
     const parsed=quizSchema(minutes).safeParse(raw);
-    if(!parsed.success)throw new LearningFailure('INVALID_STRUCTURE');
-    const questions=parsed.data.questions.map(q=>{
-      if(new Set(q.choices.map(c=>c.id)).size!==3||new Set(q.segmentIds).size!==q.segmentIds.length)throw new LearningFailure('INVALID_STRUCTURE');
+    if(!parsed.success)throw quizFailure('QUIZ_JSON_CONTRACT_INVALID',{failurePhase:'contract-resolution'});
+    const questions=parsed.data.questions.map((q,index)=>{
       const correct=q.choices.find(c=>c.id===q.correctChoiceId)!;
-      const refs=context.resolve({text:q.explanation,kind:'explanation',segmentIds:q.segmentIds}).citations;
+      let refs;try {refs=context.resolve({text:q.explanation,kind:'explanation',segmentIds:q.segmentIds}).citations;}catch {throw quizFailure('QUIZ_EVIDENCE_INVALID',{failurePhase:'contract-resolution',questionOrdinal:index+1,evidenceReferenceCount:q.segmentIds.length});}
       return {type:'mcq' as const,prompt:q.prompt,choices:q.choices.map(c=>c.text),expected:[correct.text],variants:[],explanation:q.explanation,difficulty:'easy' as const,citations:refs};
     });
     validateQuizChoices(questions);return {questions};

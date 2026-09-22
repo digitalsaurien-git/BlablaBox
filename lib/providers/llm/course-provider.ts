@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { type LearningMode, type LearningOutput, type Passage } from '../../courses/learning-contract.ts';
 import { activitySchema, validateActivity, isEvaluation, type ValidationReport } from '../../courses/activity-contract.ts';
-import { LearningFailure, safeUsage, withUsage, failureUsage, learningErrorCode } from '../../courses/learning-errors.ts';
+import { LearningFailure, safeUsage, withUsage, failureUsage, learningErrorCode, withDiagnostics, type LearningFailurePhase } from '../../courses/learning-errors.ts';
 import type { LearningTrace } from '../../courses/learning-trace.ts';
 import { auditEvidence, essentialSubject, evidenceContext, evidenceSchema, orderEssentialSegments, usesEvidence, type EssentialFact } from '../../courses/evidence.ts';
 import { essentialPlan } from '../../courses/essential-plan.ts';
@@ -37,7 +37,7 @@ async function withAbort<T>(signal:AbortSignal,run:()=>Promise<T>):Promise<T> {
 }
 
 export const OUTPUT_LIMITS={explain:2400,summary:1800,essential:2000,visual:4000,quiz:2400,gap:5000,order:5000,mix:6500,homework:5500} as const;
-type RequestOptions={maxOutputTokens?:number;concise?:boolean};
+type RequestOptions={maxOutputTokens?:number;concise?:boolean;activity?:LearningMode;failurePhase?:LearningFailurePhase};
 export function conciseOptions(model:string,concise:boolean) {
   // Explicit allowlist: never send unsupported parameters to arbitrary models.
   return concise&&/^gpt-5(?:-mini|-nano)?(?:-2025-08-07)?$/.test(model)?{reasoning:{effort:'low'},text:{verbosity:'low'}}:{};
@@ -101,14 +101,16 @@ export async function structuredResponse(apiKey:string, model:string, instructio
         body:JSON.stringify({model,store:false,instructions,input,...conciseOptions(model,options.concise??false),max_output_tokens:options.maxOutputTokens??6500,text:{...conciseOptions(model,options.concise??false).text,format:{type:'json_schema',name:'course_result',strict:true,schema}}}),
       });
       if(!response.ok) throw new Error('Le service est momentanément indisponible.');
-      const body=await response.json().catch((error:unknown)=>{if(error instanceof SyntaxError)throw new LearningFailure('INVALID_STRUCTURE');throw error;});
+      const malformed=(reason:'invalid-json'|'incomplete'|'empty-output'|'refusal')=>options.activity==='quiz'?withDiagnostics(new LearningFailure('QUIZ_JSON_CONTRACT_INVALID'),{failurePhase:options.failurePhase??'parsing',providerFinishReason:reason}):new LearningFailure('INVALID_STRUCTURE');
+      const body=await response.json().catch((error:unknown)=>{if(error instanceof SyntaxError)throw malformed('invalid-json');throw error;});
       usage=safeUsage({inputTokens:body.usage?.input_tokens,outputTokens:body.usage?.output_tokens});
       requestSignal.throwIfAborted();
-      if(body.status==='incomplete')throw new LearningFailure('INVALID_STRUCTURE');
+      if(body.status==='incomplete')throw malformed('incomplete');
       const content=body.output?.filter((o:{type:string})=>o.type==='message').flatMap((o:{content:unknown[]})=>o.content) ?? [];
-      if(content.some((c:{type:string})=>c.type==='refusal')) throw new Error('Le service ne peut pas traiter cette demande.');
+      if(content.some((c:{type:string})=>c.type==='refusal')) throw options.activity==='quiz'?malformed('refusal'):new Error('Le service ne peut pas traiter cette demande.');
       const text=content.filter((c:{type:string})=>c.type==='output_text').map((c:{text:string})=>c.text).join('');
-      try {return {data:JSON.parse(text),usage};}catch{throw new LearningFailure('INVALID_STRUCTURE');}
+      if(!text)throw malformed('empty-output');
+      try {return {data:JSON.parse(text),usage};}catch{throw malformed('invalid-json');}
     });
   } catch(error) {
     if(timedOut(error,requestSignal))throw withUsage(new LearningFailure('TIMEOUT'),usage);
@@ -188,7 +190,7 @@ export async function generateCourse(input:CourseInput,trace?:LearningTrace):Pro
     const selectedSegments=input.mode==='essential'&&evidence?orderEssentialSegments(evidence.segments,facts):evidence?.segments;
     const modelInput=quiz?.input??(evidence?{mode:input.mode,...(plan?{subjectProfile:essentialSubject(input.subject),keyFacts:facts,cardSlots:plan.slots}:{}),segments:selectedSegments!.map(({id,text,category})=>({id,text,category}))}:input);
     const minimum=input.mode==='explain'&&evidence&&evidence.segments.length>1?2:1;
-    const result=await structuredResponse(process.env.LLM_API_KEY ?? '',process.env.LLM_MODEL ?? 'gpt-5-mini',activityInstructions(input.mode),JSON.stringify(modelInput),z.toJSONSchema(quiz?.schema??plan?.schema??(evidence?evidenceSchema(input.mode,minimum):activitySchema(input.mode))) as Record<string,unknown>,signal,{maxOutputTokens:input.mode==='quiz'&&input.minutes===10?4000:OUTPUT_LIMITS[input.mode],concise:input.mode==='quiz'||!isEvaluation(input.mode)});
+    const result=await structuredResponse(process.env.LLM_API_KEY ?? '',process.env.LLM_MODEL ?? 'gpt-5-mini',activityInstructions(input.mode),JSON.stringify(modelInput),z.toJSONSchema(quiz?.schema??plan?.schema??(evidence?evidenceSchema(input.mode,minimum):activitySchema(input.mode))) as Record<string,unknown>,signal,{maxOutputTokens:input.mode==='quiz'&&input.minutes===10?4000:OUTPUT_LIMITS[input.mode],concise:input.mode==='quiz'||!isEvaluation(input.mode),...(input.mode==='quiz'?{activity:'quiz' as const,failurePhase:'parsing' as const}:{})});
     raw=result.data;usage=result.usage;
     trace?.event('generation-end',usage);
     // Format and lexical checks do not establish factual support. Audit separately
@@ -200,7 +202,7 @@ export async function generateCourse(input:CourseInput,trace?:LearningTrace):Pro
     if(quiz) {
       const questions=validated.questions.map((q,index)=>({index,prompt:q.prompt,choices:q.choices.map((text,i)=>({id:['a','b','c'][i],text})),correctChoiceId:['a','b','c'][q.choices.indexOf(q.expected[0])],explanation:q.explanation,citations:q.citations}));
       trace?.event('audit-start',usage);
-      const audit=await structuredResponse(process.env.LLM_API_KEY??'',process.env.LLM_MODEL??'gpt-5-mini',QUIZ_AUDIT_INSTRUCTIONS,JSON.stringify({subjectProfile:quiz.input.subjectProfile,questions}),z.toJSONSchema(quizAuditSchema(questions.length)) as Record<string,unknown>,signal,{maxOutputTokens:input.minutes===5?1200:1800,concise:true});
+      const audit=await structuredResponse(process.env.LLM_API_KEY??'',process.env.LLM_MODEL??'gpt-5-mini',QUIZ_AUDIT_INSTRUCTIONS,JSON.stringify({subjectProfile:quiz.input.subjectProfile,questions}),z.toJSONSchema(quizAuditSchema(questions.length)) as Record<string,unknown>,signal,{maxOutputTokens:input.minutes===5?1200:1800,concise:true,activity:'quiz',failurePhase:'audit'});
       usage=addUsage(usage,audit.usage);trace?.event('audit-end',usage);
       assertQuizAudit(audit.data,questions.length);
       return {data:validated,usage};

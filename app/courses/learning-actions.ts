@@ -33,7 +33,7 @@ export async function startCourseLearning(form:FormData) {
   const path=mode==='homework'?'homework':['quiz','gap','order','mix'].includes(mode)?'revise':'understand';
   let result;
   try {result=await prepareLearning(prisma,user.id,id,mode as LearningMode,minutes,field(form,'instruction'),trace);}
-  catch(error){trace.failed(error);revalidatePath(coursePath(id));redirect(`${coursePath(id)}/${path}?error=${code(error)}${path==='revise'?`&minutes=${minutes}`:''}`);}
+  catch(error){trace.failed(error);revalidatePath(coursePath(id));redirect(`${coursePath(id)}/${path}?error=${code(error)}&activity=${encodeURIComponent(mode)}${path==='revise'?`&minutes=${minutes}`:''}`);}
   trace.event('done');
   revalidatePath(coursePath(id));
   redirect(result.sessionId?`${coursePath(id)}/session/${result.sessionId}`:`${coursePath(id)}/content/${result.versionId}`);
