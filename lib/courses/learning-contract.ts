@@ -23,7 +23,7 @@ export const learningSchema = z.object({
 export type LearningOutput = z.infer<typeof learningSchema>;
 export type Question = LearningOutput['questions'][number];
 export type Passage = {id:string;text:string;quality:string;label:string;method:string};
-export const MODES = ['explain','summary','essential','memo','visual','quiz','gap','order','mix','homework'] as const;
+export const MODES = ['explain','summary','essential','memo','flashcards','visual','quiz','gap','order','mix','homework'] as const;
 export type LearningMode = typeof MODES[number];
 export const normalizeAnswer = (s:string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/−/g,'-').replace(/[^a-z0-9+*/=<>^%,.\-]+/g,' ').replace(/[. ]+$/g,'').trim();
 export const insufficient = 'Je ne peux pas le vérifier avec ce cours.';

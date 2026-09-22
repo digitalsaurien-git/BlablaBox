@@ -8,6 +8,7 @@ export const explainSchema=z.object({blocks:z.array(shortBlock).min(1).max(3)}).
 export const summarySchema=z.object({blocks:z.array(shortBlock).min(1).max(2)}).strict();
 export const essentialSchema=z.object({blocks:z.array(essentialBlock).min(1).max(3)}).strict();
 export const memoSchema=z.object({blocks:z.array(essentialBlock).min(1).max(8)}).strict();
+export const flashcardsSchema=z.object({blocks:z.array(essentialBlock).min(1).max(10)}).strict();
 export const visualSchema=z.object({blocks:z.array(shortBlock).min(1).max(3),visual}).strict();
 export const revisionSchema=z.object({questions:z.array(question).min(1).max(8)}).strict();
 export const homeworkSchema=z.object({homework:learningSchema.shape.homework.unwrap()}).strict();
@@ -16,12 +17,13 @@ export function activitySchema(mode:LearningMode) {
   if(mode==='summary')return summarySchema;
   if(mode==='essential')return essentialSchema;
   if(mode==='memo')return memoSchema;
+  if(mode==='flashcards')return flashcardsSchema;
   if(mode==='visual')return visualSchema;
   if(mode==='homework')return homeworkSchema;
   return revisionSchema;
 }
 export const isEvaluation=(mode:LearningMode)=>['quiz','gap','order','mix','homework'].includes(mode);
-export const activityTitle=(mode:LearningMode)=>({explain:'Comprendre ton cours',summary:'Le résumé de ton cours',essential:'L’essentiel à retenir',memo:'Ta fiche mémo',visual:'Ton cours en visuel',homework:'Ton devoir, étape par étape'} as Record<string,string>)[mode]??'Réviser ton cours';
+export const activityTitle=(mode:LearningMode)=>({explain:'Comprendre ton cours',summary:'Le résumé de ton cours',essential:'L’essentiel à retenir',memo:'Ta fiche mémo',flashcards:'Tes flashcards',visual:'Ton cours en visuel',homework:'Ton devoir, étape par étape'} as Record<string,string>)[mode]??'Réviser ton cours';
 export type ValidationReport={totalBlocks:number;acceptedBlocks:number;rejectedBlocks:number;codes:LearningErrorCode[]};
 export type ReportValidation=(report:ValidationReport)=>void;
 const shell=(mode:LearningMode):LearningOutput=>({title:activityTitle(mode),blocks:[],questions:[],visual:null,homework:null});
@@ -55,13 +57,13 @@ export function validateActivity(raw:unknown,passages:Passage[],mode:LearningMod
   const rawBlocks=Array.isArray(allowed.blocks)?allowed.blocks:[allowed.blocks];
   const stats:ValidationReport={totalBlocks:rawBlocks.length,acceptedBlocks:0,rejectedBlocks:0,codes:[]};
   const reject=(error:unknown)=>{stats.rejectedBlocks++;const code=learningErrorCode(error);if(!stats.codes.includes(code))stats.codes.push(code);};
-  const maximum=mode==='summary'?2:mode==='memo'?8:3;
+  const maximum=mode==='summary'?2:mode==='memo'?8:mode==='flashcards'?10:3;
   for(const rawBlock of rawBlocks) {
     try {
-      const parsed=(['essential','memo'].includes(mode)?essentialBlock:shortBlock).safeParse(resolveBlock?resolveBlock(rawBlock):rawBlock);
+      const parsed=(['essential','memo','flashcards'].includes(mode)?essentialBlock:shortBlock).safeParse(resolveBlock?resolveBlock(rawBlock):rawBlock);
       if(!parsed.success||output.blocks.length>=maximum)throw new LearningFailure('INVALID_STRUCTURE');
       if(resolveBlock&&output.blocks.some(b=>b.text.normalize('NFC').toLocaleLowerCase('fr').replace(/\s+/g,' ').trim()===parsed.data.text.normalize('NFC').toLocaleLowerCase('fr').replace(/\s+/g,' ').trim()))throw new LearningFailure('INVALID_STRUCTURE');
-      if(['essential','memo'].includes(mode)) {
+      if(['essential','memo','flashcards'].includes(mode)) {
         const title=parsed.data.title!;
         const normalizedTitle=title.normalize('NFC').toLocaleLowerCase('fr').replace(/\s+/g,' ').trim();
         if(/^(?:explication à partir du cours|à retenir|l['’]essentiel)$/iu.test(normalizedTitle)||output.blocks.some(block=>block.title?.normalize('NFC').toLocaleLowerCase('fr').replace(/\s+/g,' ').trim()===normalizedTitle))throw new LearningFailure('INVALID_STRUCTURE');

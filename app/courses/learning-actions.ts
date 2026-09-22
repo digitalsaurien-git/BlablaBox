@@ -30,13 +30,13 @@ export async function startCourseLearning(form:FormData) {
   if(!MODES.includes(mode as LearningMode))redirect(coursePath(id));
   trace.activity?.(mode as LearningMode);
   const minutes=form.get('minutes')==='10'?10:5;
-  const path=mode==='homework'?'homework':['quiz','gap','order','mix','memo'].includes(mode)?'revise':'understand';
+  const path=mode==='homework'?'homework':['quiz','gap','order','mix','memo','flashcards'].includes(mode)?'revise':'understand';
   let result;
   try {result=await prepareLearning(prisma,user.id,id,mode as LearningMode,minutes,field(form,'instruction'),trace);}
   catch(error){trace.failed(error);revalidatePath(coursePath(id));redirect(`${coursePath(id)}/${path}?error=${code(error)}&activity=${encodeURIComponent(mode)}${path==='revise'?`&minutes=${minutes}`:''}`);}
   trace.event('done');
   revalidatePath(coursePath(id));
-  redirect(result.sessionId?`${coursePath(id)}/session/${result.sessionId}`:`${coursePath(id)}/content/${result.versionId}`);
+  redirect(result.sessionId?`${coursePath(id)}/session/${result.sessionId}`:mode==='flashcards'?`${coursePath(id)}/flashcards/${result.versionId}`:`${coursePath(id)}/content/${result.versionId}`);
 }
 export async function submitLearningAnswer(form:FormData) {
   const user=await requireCurrentUser();const courseId=field(form,'courseId');const sessionId=field(form,'sessionId');
