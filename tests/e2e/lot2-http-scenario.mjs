@@ -94,8 +94,10 @@ try {
   redirect(await a.submitForm(staleSort));
   assert.deepEqual((await db.coursePart.findMany({where:{userId:aId},orderBy:{position:"asc"}})).map(p=>p.referenceLabel),["4.1","4.2","4.10"]);
   redirect(await a.submitForm(staleSort),"/courses?error=stale-order");
-  const alertHtml=await (await a.request("/courses?error=stale-order")).text();
-  assert.match(alertHtml,/role="alert"/); assert.match(alertHtml,/autre onglet/);
+  const staleAlert=await a.request("/courses?error=stale-order");
+  assert.equal(staleAlert.status,200);
+  const alertHtml=await staleAlert.text();
+  assert.match(alertHtml,/role="alert"/); assert.match(alertHtml,/cours a changé/i); assert.match(alertHtml,/relance la proposition/i);
   redirect(await a.submitForm(await createPartForm(),{title:"Document attendu",referenceLabel:"5",documentExpected:"on"}));
   const expected=await db.coursePart.findFirstOrThrow({where:{userId:aId,state:"DOCUMENT_EXPECTED"}});
   const parts=await db.coursePart.findMany({where:{userId:aId},orderBy:{position:"asc"}});
