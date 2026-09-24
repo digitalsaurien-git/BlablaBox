@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "test:coverage": "node --experimental-strip-types --test --experimental-test-coverage tests/*.test.mjs",
     "typecheck": "tsc --noEmit --incremental false",
     "start": "next start",
     "db:generate": "prisma generate",

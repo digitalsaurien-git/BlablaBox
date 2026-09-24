@@ -12,6 +12,7 @@ import { validateTTSScript, toPublicAudioError } from "@/lib/audio-generation";
 import { removeStoredAudio } from "@/lib/audio-storage";
 import { generateSegmentedStoredAudio } from "@/lib/segmented-audio-generation";
 import { checkLLMRateLimit, checkTTSRateLimit } from "@/lib/auth/action-rate-limit";
+import { readString, readAllowed } from "@/lib/actions/form-helpers";
 
 const allowedDeliveryTypes: DeliveryType[] = [
   "IMMERSIVE_STORY",
@@ -19,26 +20,20 @@ const allowedDeliveryTypes: DeliveryType[] = [
   "MEMORY_AUDIO_CARD",
   "REVIEW_QA",
 ];
-const allowedAudiences = ["10-12 ans", "Collège", "Lycée", "Adulte"];
-
-function readString(formData: FormData, key: string): string {
-  const value = formData.get(key);
-  return typeof value === "string" ? value.trim() : "";
-}
+const allowedDurations = [3, 5, 10, 15, 20] as const;
+const allowedAudiences = ["10-12 ans", "Collège", "Lycée", "Adulte"] as const;
 
 function readDuration(formData: FormData): number {
   const value = Number(readString(formData, "targetDurationMinutes"));
-  return [3, 5, 10, 15, 20].includes(value) ? value : 3;
+  return (allowedDurations as readonly number[]).includes(value) ? value : 3;
 }
 
 function readDeliveryType(formData: FormData): DeliveryType {
-  const value = readString(formData, "deliveryType") as DeliveryType;
-  return allowedDeliveryTypes.includes(value) ? value : "COURSE_SUMMARY";
+  return readAllowed(readString(formData, "deliveryType"), allowedDeliveryTypes, "COURSE_SUMMARY");
 }
 
 function readAudience(formData: FormData): string {
-  const value = readString(formData, "audience");
-  return allowedAudiences.includes(value) ? value : "Collège";
+  return readAllowed(readString(formData, "audience"), [...allowedAudiences], "Collège");
 }
 
 function createTitle(sourceContent: string, learningObjective: string): string {

@@ -20,21 +20,13 @@ import type {
 } from "@/lib/providers/llm";
 import { resolveResearchMode } from "@/lib/research-policy";
 import { checkLLMRateLimit } from "@/lib/auth/action-rate-limit";
+import { readString, readAllowed } from "@/lib/actions/form-helpers";
 
 const audiences = ["10-12 ans", "Collège", "Lycée", "Adulte"] as const;
 const levels = ["Débutant", "Intermédiaire", "Avancé"] as const;
 const responseModes: ResponseMode[] = ["EXPLAIN", "STORY", "REVIEW", "QUICK"];
 const vocabularyLevels: VocabularyLevel[] = ["VERY_SIMPLE", "COMMON", "PRECISE"];
 const adaptationModes: AdaptationMode[] = ["STANDARD", "FOCUS", "EASY_READING", "MEMORY"];
-
-function readString(formData: FormData, key: string): string {
-  const value = formData.get(key);
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function readAllowed<T extends string>(value: string, allowed: readonly T[], fallback: T): T {
-  return allowed.includes(value as T) ? (value as T) : fallback;
-}
 
 function sourceWrites(sources: ReturnType<typeof sanitizeLearningSources>) {
   return sources.map((source) => ({
