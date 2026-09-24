@@ -19,6 +19,7 @@ import type {
   VocabularyLevel,
 } from "@/lib/providers/llm";
 import { resolveResearchMode } from "@/lib/research-policy";
+import { checkLLMRateLimit } from "@/lib/auth/action-rate-limit";
 
 const audiences = ["10-12 ans", "Collège", "Lycée", "Adulte"] as const;
 const levels = ["Débutant", "Intermédiaire", "Avancé"] as const;
@@ -56,6 +57,9 @@ export async function createUnderstandProject(formData: FormData) {
   const user = await requireCurrentUser();
   const userRequest = readString(formData, "userRequest");
   if (!userRequest) redirect("/understand/new?error=missing-request");
+  if (!checkLLMRateLimit(user.id)) {
+    redirect("/understand/new?error=rate-limited");
+  }
 
   const responseMode = readAllowed(readString(formData, "responseMode"), responseModes, "EXPLAIN");
   const audience = readAllowed(readString(formData, "audience"), audiences, "Collège");
@@ -155,6 +159,9 @@ export async function regenerateUnderstandProject(formData: FormData) {
     where: ownedProjectWhere(user.id, projectId),
   });
   if (!project || project.projectKind !== "UNDERSTAND_LISTEN") redirect("/projects");
+  if (!checkLLMRateLimit(user.id)) {
+    redirect(`/projects/${project.id}?error=rate-limited`);
+  }
 
   const responseMode = (project.responseMode ?? "EXPLAIN") as ResponseMode;
   const researchMode = resolveResearchMode(responseMode, project.sourceContent) as ResearchMode;

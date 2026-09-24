@@ -7,6 +7,7 @@ import { clearLoginFailures, isLoginAllowed, recordLoginFailure } from "@/lib/au
 import { isRegistrationEnabled } from "@/lib/auth/registration";
 import { createUserSession, destroyCurrentSession } from "@/lib/auth/session";
 import { validateCredentials, validateRegistration } from "@/lib/auth/validation";
+import { logSecurity } from "@/lib/security-logger";
 
 function readString(formData: FormData, key: string): string {
   const value = formData.get(key);
@@ -66,8 +67,12 @@ export async function login(formData: FormData) {
     if (allowed && user && passwordIsValid) {
       authenticatedUserId = user.id;
       await clearLoginFailures(credentials.email);
+      logSecurity({ category: "auth", action: "login_success", userId: user.id });
     } else if (allowed) {
       await recordLoginFailure(credentials.email);
+      logSecurity({ category: "auth", action: "login_failure" });
+    } else {
+      logSecurity({ category: "auth", action: "login_blocked_throttle" });
     }
   } catch {
     // Authentication failures never expose whether the account exists.
@@ -83,6 +88,7 @@ export async function login(formData: FormData) {
 }
 
 export async function logout() {
+  logSecurity({ category: "auth", action: "logout" });
   await destroyCurrentSession();
   redirect("/");
 }

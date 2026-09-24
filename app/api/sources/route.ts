@@ -5,6 +5,7 @@ import { importSource, SourceNotFound } from "@/lib/sources/import";
 import { getSourceUploadMaxBytes, validateSourceUpload } from "@/lib/sources/validation";
 import { readBoundedFormData } from "@/lib/sources/request";
 import { hasSameBrowserOrigin } from "@/lib/sources/same-origin";
+import { checkUploadRateLimit } from "@/lib/auth/action-rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +19,7 @@ export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Authentification requise." }, { status: 401, headers: privateHeaders });
   if (!hasSameBrowserOrigin(request)) return NextResponse.json({ error: "Origine refusée." }, { status: 403, headers: privateHeaders });
+  if (!checkUploadRateLimit(user.id)) return NextResponse.json({ error: "Trop de requêtes. Réessayez dans quelques minutes." }, { status: 429, headers: privateHeaders });
   try {
     const limit = getSourceUploadMaxBytes();
     const formData = await readBoundedFormData(request, limit);

@@ -8,6 +8,7 @@ import { advanceSession, analyzeCourse, answerSession, COURSE_READING_REQUIRED, 
 import { LLM_TIMEOUT_MESSAGE } from '@/lib/providers/llm/course-provider';
 import { createLearningTrace } from '@/lib/courses/learning-trace';
 import { learningErrorCategory } from '@/lib/courses/learning-errors';
+import { checkLLMRateLimit, checkTTSRateLimit } from '@/lib/auth/action-rate-limit';
 const field=(f:FormData,k:string)=>typeof f.get(k)==='string'?String(f.get(k)):'';
 const coursePath=(id:string)=>`/courses/${encodeURIComponent(id)}`;
 function code(error:unknown) {
@@ -21,6 +22,7 @@ export async function analyzeLearningCourse(form:FormData) {
   const consent=form.get('consent')==='yes';
   const ids=consent?form.getAll('page').filter((v):v is string=>typeof v==='string'):[];
   if(!consent||!ids.length)redirect(`${coursePath(id)}?readingError=consent#course-reading`);
+  if(!checkLLMRateLimit(user.id))redirect(`${coursePath(id)}?readingError=rate-limited#course-reading`);
   try {await analyzeCourse(prisma,user.id,id,ids);}catch(error){redirect(`${coursePath(id)}?readingError=${code(error)}#course-reading`);}
   revalidatePath(coursePath(id));redirect(coursePath(id));
 }
@@ -29,6 +31,7 @@ export async function startCourseLearning(form:FormData) {
   const user=await requireCurrentUser();const id=field(form,'courseId');const mode=field(form,'mode');
   if(!MODES.includes(mode as LearningMode))redirect(coursePath(id));
   trace.activity?.(mode as LearningMode);
+  if(!checkLLMRateLimit(user.id))redirect(`${coursePath(id)}?error=rate-limited`);
   const minutes=form.get('minutes')==='10'?10:5;
   const path=mode==='homework'?'homework':['quiz','gap','order','mix','memo','flashcards','mindmap'].includes(mode)?'revise':'understand';
   let result;
@@ -65,6 +68,7 @@ export async function confirmCourseReading(form:FormData) {
 export async function createLearningAudio(form:FormData) {
   const user=await requireCurrentUser();const courseId=field(form,'courseId');const versionId=field(form,'versionId');const sessionId=field(form,'sessionId');
   const url=sessionId?`${coursePath(courseId)}/session/${encodeURIComponent(sessionId)}`:`${coursePath(courseId)}/content/${encodeURIComponent(versionId)}`;
+  if(!checkTTSRateLimit(user.id))redirect(`${url}?error=rate-limited`);
   try {await prepareAudio(prisma,user.id,versionId,field(form,'audioKey'),sessionId||undefined);}catch(error){redirect(`${url}?error=${code(error)}`);}
   revalidatePath(url);redirect(url);
 }

@@ -11,6 +11,7 @@ import { getTTSProvider } from "@/lib/providers/tts";
 import { validateTTSScript, toPublicAudioError } from "@/lib/audio-generation";
 import { removeStoredAudio } from "@/lib/audio-storage";
 import { generateSegmentedStoredAudio } from "@/lib/segmented-audio-generation";
+import { checkLLMRateLimit, checkTTSRateLimit } from "@/lib/auth/action-rate-limit";
 
 const allowedDeliveryTypes: DeliveryType[] = [
   "IMMERSIVE_STORY",
@@ -59,6 +60,9 @@ export async function createProject(formData: FormData) {
 
   if (!sourceContent || !learningObjective) {
     redirect("/projects/new?error=missing-fields");
+  }
+  if (!checkLLMRateLimit(user.id)) {
+    redirect("/projects/new?error=rate-limited");
   }
 
   const title = createTitle(sourceContent, learningObjective);
@@ -135,6 +139,9 @@ export async function regenerateProjectScript(formData: FormData) {
   });
   if (!project) redirect("/projects");
   if (project.projectKind === "COURSE_LEARNING") redirect(`/courses/${project.courseThemeId}`);
+  if (!checkLLMRateLimit(user.id)) {
+    redirect(`/projects/${project.id}?error=rate-limited`);
+  }
 
   try {
     const result = await getLLMProvider().generateAudioScript({
@@ -183,6 +190,9 @@ export async function generateProjectAudio(formData: FormData) {
   });
   if (!project) redirect("/projects");
   if (project.projectKind === "COURSE_LEARNING") redirect(`/courses/${project.courseThemeId}`);
+  if (!checkTTSRateLimit(user.id)) {
+    redirect(`/projects/${project.id}?error=rate-limited`);
+  }
 
   const contentVersion = project.contentVersion;
   let script: string;
