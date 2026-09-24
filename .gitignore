@@ -16,6 +16,7 @@ yarn-error.log*
 
 .DS_Store
 prisma/dev.db
+*.tsbuildinfo
 
 # Generated audio files are runtime data, never source files.
 storage/audio/
