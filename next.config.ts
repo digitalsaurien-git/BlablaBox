@@ -1,5 +1,8 @@
 import type { NextConfig } from "next";
 
+const sentryDsn = process.env.SENTRY_DSN ?? "";
+const sentryHost = sentryDsn ? (() => { try { return new URL(sentryDsn).hostname; } catch { return ""; } })() : "";
+
 const nextConfig: NextConfig = {
   serverActions: {
     bodySizeLimit: "4mb",
@@ -39,7 +42,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob:",
               "font-src 'self' data:",
-              "connect-src 'self'",
+              `connect-src 'self'${sentryHost ? ` https://${sentryHost}` : ""}`,
               "media-src 'self' blob:",
               "object-src 'none'",
               "frame-ancestors 'none'",

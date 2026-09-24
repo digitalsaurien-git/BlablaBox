@@ -1,0 +1,133 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run typecheck
+
+  test:
+    name: Tests unitaires
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: blablabox
+          POSTGRES_PASSWORD: blablabox_ci
+          POSTGRES_DB: blablabox_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U blablabox"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      DATABASE_URL: postgresql://blablabox:blablabox_ci@localhost:5432/blablabox_test
+      SOURCE_STORAGE_ROOT: /tmp/blablabox-sources
+      AUDIO_STORAGE_PATH: /tmp/blablabox-audio
+      SESSION_SECRET: ci-test-secret-at-least-32-characters-long
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - run: mkdir -p $SOURCE_STORAGE_ROOT $AUDIO_STORAGE_PATH
+      - run: npm test
+
+  test-e2e:
+    name: Tests E2E (Playwright)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: blablabox
+          POSTGRES_PASSWORD: blablabox_ci
+          POSTGRES_DB: blablabox_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U blablabox"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      DATABASE_URL: postgresql://blablabox:blablabox_ci@localhost:5432/blablabox_test
+      SOURCE_STORAGE_ROOT: /tmp/blablabox-sources
+      AUDIO_STORAGE_PATH: /tmp/blablabox-audio
+      SESSION_SECRET: ci-test-secret-at-least-32-characters-long
+      NODE_ENV: test
+      PLAYWRIGHT_BASE_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - run: mkdir -p $SOURCE_STORAGE_ROOT $AUDIO_STORAGE_PATH
+      - run: npx playwright install --with-deps chromium
+      - name: Build et lancer les tests E2E
+        run: |
+          npm run build
+          npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  test-components:
+    name: Tests composants (Vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run test:components
+
+  lint-secrets:
+    name: Secrets check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Vérifier qu'aucun secret n'est exposé côté client
+        run: |
+          # Vérifie qu'aucune clé serveur n'utilise le préfixe NEXT_PUBLIC_
+          if grep -rn 'NEXT_PUBLIC_.*SECRET\|NEXT_PUBLIC_.*KEY\|NEXT_PUBLIC_.*PASSWORD\|NEXT_PUBLIC_.*DATABASE' --include='*.ts' --include='*.tsx' --include='*.env*' . ; then
+            echo "::error::Des secrets potentiels sont exposés avec le préfixe NEXT_PUBLIC_"
+            exit 1
+          fi
+          echo "Aucun secret exposé détecté."
