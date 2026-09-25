@@ -13,7 +13,7 @@ const EXTRACTOR='course-reader-1';
 
 export async function ownedCourse(db:PrismaClient,userId:string,id:string) {
   const course=await db.courseTheme.findFirst({
-    where:{id,userId},
+    where:{id,userId,deletedAt:null},
     include:{subject:true,parts:{
       orderBy:[{position:'asc'},{id:'asc'}],
       include:{placements:{

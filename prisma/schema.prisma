@@ -97,6 +97,7 @@ model Project {
   errorMessage          String?         @db.Text
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
+  deletedAt             DateTime?
   sources               ProjectSource[]
   user                  User?           @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   courseThemeId         String?
@@ -212,6 +213,7 @@ model CourseTheme {
   orderVersion Int   @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  deletedAt DateTime?
 
   user     User         @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   subject  Subject      @relation(fields: [subjectId, userId], references: [id, userId], onDelete: Cascade, onUpdate: Cascade)

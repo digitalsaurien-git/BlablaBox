@@ -44,7 +44,7 @@ export async function importSmartCourse(database: PrismaClient, input: SmartImpo
       if (asset) await storage.readSourceFile(asset.storageKey);
       else asset = await transaction.sourceAsset.create({ data: { userId: input.userId, sha256: metadata.sha256, storageKey: target.storageKey, mimeType: metadata.mimeType, byteSize: metadata.byteSize } });
 
-      const themes = await transaction.courseTheme.findMany({ where: { userId: input.userId, subjectId: input.subjectId } });
+      const themes = await transaction.courseTheme.findMany({ where: { userId: input.userId, subjectId: input.subjectId, deletedAt: null } });
       let theme = input.existingThemeId ? themes.find((candidate) => candidate.id === input.existingThemeId) : undefined;
       if (input.existingThemeId && !theme) throw new CourseMutationError("not-found");
       theme ??= themes.find((candidate) => normalizeCourseText(candidate.title) === normalizeCourseText(input.courseTitle));

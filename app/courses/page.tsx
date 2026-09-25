@@ -23,7 +23,7 @@ export default async function CoursesPage({ searchParams }: PageProps) {
   const years = await prisma.schoolYear.findMany({
     where: { userId: user.id },
     orderBy: [{ startYear: "desc" }, { label: "asc" }],
-    include: { subjects: { orderBy: { title: "asc" }, include: { themes: { orderBy: { title: "asc" }, include: {
+    include: { subjects: { orderBy: { title: "asc" }, include: { themes: { where: { deletedAt: null }, orderBy: { title: "asc" }, include: {
       chapters: { orderBy: { title: "asc" } },
       parts: { orderBy: [{ position: "asc" }, { id: "asc" }], include: { placements: { include: { sourceAsset: { select: { id: true, imports: { orderBy: { createdAt: "asc" }, take: 1, select: { originalFileName: true } } } } } } } },
     } } } } },

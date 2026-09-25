@@ -4,7 +4,7 @@ import { compareNaturalReferences, parseNaturalSegments } from "./ordering.ts";
 export class CourseMutationError extends Error {}
 
 async function lockOrder(transaction: Prisma.TransactionClient, userId: string, themeId: string, expectedVersion: number) {
-  if (!await transaction.courseTheme.findFirst({ where: { id: themeId, userId }, select: { id: true } })) throw new CourseMutationError("not-found");
+  if (!await transaction.courseTheme.findFirst({ where: { id: themeId, userId, deletedAt: null }, select: { id: true } })) throw new CourseMutationError("not-found");
   const result = await transaction.courseTheme.updateMany({
     where: { id: themeId, userId, orderVersion: expectedVersion },
     data: { orderVersion: { increment: 1 } },

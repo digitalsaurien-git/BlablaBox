@@ -98,7 +98,7 @@ export async function createChapter(formData: FormData) {
   const courseThemeId = readId(formData, "courseThemeId");
   const title = readText(formData, "title", 160);
   if (!courseThemeId || !title) coursesError("chapter-required");
-  const theme = await prisma.courseTheme.findFirst({ where: { id: courseThemeId, userId: user.id } });
+  const theme = await prisma.courseTheme.findFirst({ where: { id: courseThemeId, userId: user.id, deletedAt: null } });
   if (!theme) coursesError("not-found");
   try { await prisma.chapter.create({ data: { userId: user.id, courseThemeId, title } }); }
   catch (error) { writeError(error); }
