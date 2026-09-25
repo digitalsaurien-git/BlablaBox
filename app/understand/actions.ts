@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ownedProjectWhere } from "@/lib/auth/ownership";
 import { requireCurrentUser } from "@/lib/auth/session";
+import { MSG_GENERATION_FAILED, MSG_GENERATION_CONCURRENT_EDIT } from "@/lib/messages";
 import {
   createLearningTitle,
   responseModeToDeliveryType,
@@ -42,7 +43,7 @@ function sourceWrites(sources: ReturnType<typeof sanitizeLearningSources>) {
 function publicGenerationError(error: unknown): string {
   return error instanceof Error && error.message
     ? error.message.slice(0, 500)
-    : "La génération n'a pas abouti. Réessayez ultérieurement.";
+    : MSG_GENERATION_FAILED;
 }
 
 export async function createUnderstandProject(formData: FormData) {
@@ -188,7 +189,7 @@ export async function regenerateUnderstandProject(formData: FormData) {
           errorMessage: null,
         },
       });
-      if (updated.count !== 1) throw new Error("Le projet a été modifié pendant la génération.");
+      if (updated.count !== 1) throw new Error(MSG_GENERATION_CONCURRENT_EDIT);
       await transaction.projectSource.deleteMany({
         where: { projectId: project.id, project: { userId: user.id } },
       });

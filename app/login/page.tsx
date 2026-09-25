@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { login } from "@/app/auth/actions";
 import { isRegistrationEnabled } from "@/lib/auth/registration";
 import { getCurrentUser } from "@/lib/auth/session";
+import { MSG_AUTH_UNAVAILABLE, MSG_AUTH_FAILED } from "@/lib/messages";
 
 type LoginPageProps = {
   searchParams: Promise<{ error?: string }>;
@@ -24,9 +25,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       <form action={login} className="grid gap-5 rounded-2xl border border-ink/10 bg-white p-5 shadow-sm">
         {error ? (
           <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
-            {error === "unavailable"
-              ? "Connexion momentanément indisponible. Réessaie plus tard."
-              : "Connexion impossible. Vérifie tes informations ou réessaie plus tard."}
+            {error === "unavailable" ? MSG_AUTH_UNAVAILABLE : MSG_AUTH_FAILED}
           </p>
         ) : null}
         <label className="grid gap-2">

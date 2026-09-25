@@ -5,8 +5,9 @@ import { readLearningDocument } from './document-reader.ts';
 import { getOCRProvider } from '../providers/ocr/index.ts';
 import { insufficient, type Passage } from './learning-contract.ts';
 import { digest, splitPassages, claim, complete } from './learning-helpers.ts';
+import { MSG_COURSE_READING_REQUIRED, MSG_READING_IN_PROGRESS, MSG_NOT_FOUND_COURSE, MSG_NOT_FOUND_PAGE } from '../messages.ts';
 
-export const COURSE_READING_REQUIRED='Aucun passage vérifié n’est encore disponible pour travailler ce cours.';
+export const COURSE_READING_REQUIRED = MSG_COURSE_READING_REQUIRED;
 
 const EXTRACTOR='course-reader-1';
 
@@ -24,7 +25,7 @@ export async function ownedCourse(db:PrismaClient,userId:string,id:string) {
       }},
     }},
   });
-  if(!course) throw new Error('Cours introuvable.');
+  if(!course) throw new Error(MSG_NOT_FOUND_COURSE);
   return course;
 }
 export type Course=Awaited<ReturnType<typeof ownedCourse>>;
@@ -62,7 +63,7 @@ export async function analyzeCourse(db:PrismaClient,userId:string,courseId:strin
     if(asset.extractions.some(e=>e.extractorVersion===EXTRACTOR) && !selected.length)continue;
     const units=await db.$transaction(async tx=>{
       const [lock]=await tx.$queryRaw<Array<{acquired:boolean}>>`SELECT pg_try_advisory_xact_lock(hashtextextended(${`course-reading:${userId}:${asset.id}`},0)) AS acquired`;
-      if(!lock.acquired)throw new Error('La lecture est déjà en cours. Réessaie dans un instant.');
+      if(!lock.acquired)throw new Error(MSG_READING_IN_PROGRESS);
       const cached=await tx.sourceExtraction.findFirst({where:{userId,sourceAssetId:asset.id,extractorVersion:EXTRACTOR,method:'native'}});
       if(cached && !selected.length)return [];
       const read=await readLearningDocument(await readSourceFile(asset.storageKey),asset.mimeType);
@@ -96,6 +97,6 @@ export async function analyzeCourse(db:PrismaClient,userId:string,courseId:strin
 export async function reviewExtraction(db:PrismaClient,userId:string,courseId:string,extractionId:string,text:string) {
   const course=await ownedCourse(db,userId,courseId);
   const source=courseSources(course).flatMap(a=>a.extractions).find(e=>e.id===extractionId);
-  if(!source || source.method!=='ocr' || !text.trim() || text.length>20000)throw new Error('Passage invalide.');
+  if(!source || source.method!=='ocr' || !text.trim() || text.length>20000)throw new Error(MSG_NOT_FOUND_PAGE);
   return db.sourceExtraction.create({data:{userId,sourceAssetId:source.sourceAssetId,unitKey:source.unitKey,inputHash:source.inputHash,extractorVersion:`review-${randomUUID()}`,method:'reviewed',quality:'verified',text,passages:{create:splitPassages(text).map(p=>({...p,quality:'verified'}))}}});
 }

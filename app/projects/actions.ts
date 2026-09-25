@@ -13,6 +13,7 @@ import { removeStoredAudio } from "@/lib/audio-storage";
 import { generateSegmentedStoredAudio } from "@/lib/segmented-audio-generation";
 import { checkLLMRateLimit, checkTTSRateLimit } from "@/lib/auth/action-rate-limit";
 import { readString, readAllowed } from "@/lib/actions/form-helpers";
+import { MSG_PROJECT_GENERATION_UNKNOWN, MSG_PROJECT_REGENERATION_UNKNOWN } from "@/lib/messages";
 
 const allowedDeliveryTypes: DeliveryType[] = [
   "IMMERSIVE_STORY",
@@ -114,7 +115,7 @@ export async function createProject(formData: FormData) {
         audioStatus: "NOT_GENERATED",
         audioContentVersion: null,
         errorMessage:
-          error instanceof Error ? error.message : "Erreur inconnue de génération",
+          error instanceof Error ? error.message : MSG_PROJECT_GENERATION_UNKNOWN,
       },
     });
     projectId = project.id;
@@ -166,7 +167,7 @@ export async function regenerateProjectScript(formData: FormData) {
       data: {
         scriptStatus: "SCRIPT_FAILED",
         errorMessage:
-          error instanceof Error ? error.message : "Erreur inconnue de régénération",
+          error instanceof Error ? error.message : MSG_PROJECT_REGENERATION_UNKNOWN,
       },
     });
   }

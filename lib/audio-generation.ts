@@ -1,3 +1,4 @@
+import { MSG_AUDIO_GENERATION_FAILED } from './messages.ts';
 const DEFAULT_MAX_SCRIPT_CHARACTERS = 4_096;
 const DEFAULT_SEGMENT_TARGET_CHARACTERS = 3_500;
 
@@ -59,7 +60,7 @@ export function segmentTTSScript(script: string | null): string[] {
       normalized,
       start,
       proposedEnd,
-      /[.!?…](?:["”’»\])}]*)\s+/g,
+      /[.!?…](?:[""'»\])}]*)\s+/g,
     );
     const whitespaceBoundary = findLastBoundary(
       normalized,
@@ -95,5 +96,5 @@ export function segmentTTSScript(script: string | null): string[] {
 
 export function toPublicAudioError(error: unknown): string {
   if (error instanceof Error && error.message) return error.message.slice(0, 500);
-  return "La génération audio a échoué. Réessayez ultérieurement.";
+  return MSG_AUDIO_GENERATION_FAILED;
 }

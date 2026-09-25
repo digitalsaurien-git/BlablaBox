@@ -4,6 +4,7 @@ import { ProjectCard } from "@/components/project-card";
 import { ownedProjectsWhere } from "@/lib/auth/ownership";
 import { requireCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
+import { MSG_PROJECT_DB_ERROR } from "@/lib/messages";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ async function getProjects(userId: string) {
   } catch (error) {
     return {
       projects: [],
-      error: error instanceof Error ? error.message : "Connexion base impossible",
+      error: error instanceof Error ? error.message : MSG_PROJECT_DB_ERROR,
     };
   }
 }

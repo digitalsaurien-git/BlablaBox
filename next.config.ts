@@ -10,6 +10,27 @@ const nextConfig: NextConfig = {
 
   async headers() {
     return [
+      // Assets statiques versionnés par Next.js — immutables (I-4)
+      {
+        source: "/_next/static/(.*)",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      // Fichiers publics non versionnés (favicon, icônes, manifeste…)
+      {
+        source: "/(favicon\\.ico|robots\\.txt|site\\.webmanifest|.*\\.png|.*\\.svg|.*\\.ico)",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=86400, stale-while-revalidate=604800",
+          },
+        ],
+      },
+      // Règle générale de sécurité sur toutes les routes
       {
         source: "/(.*)",
         headers: [

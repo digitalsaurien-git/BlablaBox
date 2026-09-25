@@ -1,10 +1,11 @@
 import { OpenAITTSProvider } from "./openai-provider.ts";
 import { writeFile } from "node:fs/promises";
 import type { SpeechGenerationInput, SpeechGenerationResult, TTSProvider } from "./types";
+import { MSG_TTS_DISABLED } from "../../messages.ts";
 
 class DisabledTTSProvider implements TTSProvider {
   async generateSpeech(): Promise<never> {
-    throw new Error("La génération audio est désactivée. Configurez TTS_PROVIDER=openai.");
+    throw new Error(MSG_TTS_DISABLED);
   }
 }
 

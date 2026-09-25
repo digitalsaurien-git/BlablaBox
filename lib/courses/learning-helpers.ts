@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import type { Usage } from '../providers/llm/course-provider.ts';
+import { MSG_BUSY_PREPARATION } from '../messages.ts';
 
 export const digest=(value:string)=>createHash('sha256').update(value).digest('hex');
 export const json=(value:unknown)=>JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -24,7 +25,7 @@ export async function claim(db:PrismaClient,userId:string,operationKey:string,pr
   catch(error) {
     if(!(error && typeof error==='object' && 'code' in error && error.code==='P2002')) throw error;
     const changed=await db.providerUsage.updateMany({where:{userId,operationKey,status:'FAILED'},data:{status:'PENDING',createdAt:new Date()}});
-    if(changed.count!==1)throw new Error('Cette préparation est déjà en cours ou terminée. Recharge la page. Une opération interrompue doit être vérifiée avant une nouvelle tentative.');
+    if(changed.count!==1)throw new Error(MSG_BUSY_PREPARATION);
     return db.providerUsage.findUniqueOrThrow({where:{userId_operationKey:{userId,operationKey}}});
   }
 }
