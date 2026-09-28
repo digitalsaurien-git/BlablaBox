@@ -14,7 +14,11 @@ export function validateGroundedOutput(raw:unknown, passages:Passage[], mode:Lea
       if(!p.text.includes(ref.quote))throw new LearningFailure('QUOTE_MISMATCH');
     }
     const evidence = citations.map(c=>c.quote).join(' ');
-    const numbers: string[] = text.match(/\d+(?:[.,]\d+)?/g) ?? [];
+    // Only verify factual numbers: years (4+ digits) and precise values (decimals).
+    // Small standalone numbers (1-3 digits) used in the model's phrasing
+    // ("2 idées", "en 3 étapes") are not reliably verifiable against source text.
+    // Numbers with measurement units are checked separately below.
+    const numbers: string[] = (text.match(/\d+(?:[.,]\d+)?/g) ?? []).filter(n => n.replace(/[.,]/g,'').length >= 4 || /[.,]/.test(n));
     const sourceNumbers: string[] = evidence.match(/\d+(?:[.,]\d+)?/g) ?? [];
     if(numbers.some(n=>!sourceNumbers.includes(n)))throw new LearningFailure('UNVERIFIABLE_NUMBER');
     const unitPattern=/\b\d+(?:[.,]\d+)?\s*(?:Ma|Ga|ka|millions?\s+d['’]années?|milliers?\s+d['’]années?|ans?|s(?:econdes?)?|min(?:utes?)?|h(?:eures?)?|km|m|cm|mm|kg|g|%|°C)\b/giu;
