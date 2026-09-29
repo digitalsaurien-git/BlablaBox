@@ -65,7 +65,8 @@ export async function captureError({ error, context, tags }: SentryEvent): Promi
 
   const err = error instanceof Error ? error : new Error(String(error));
 
-  Sentry.withScope((scope) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  Sentry.withScope((scope: any) => {
     if (context) scope.setContext("extra", context);
     if (tags) {
       for (const [key, value] of Object.entries(tags)) {
