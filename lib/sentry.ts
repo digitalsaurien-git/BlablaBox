@@ -28,7 +28,10 @@ async function ensureInitialized(): Promise<boolean> {
   }
 
   try {
-    Sentry = await import("@sentry/nextjs");
+    // Use a variable to prevent TypeScript from resolving the module at compile time.
+    // @sentry/nextjs is an optional dependency — installed only when Sentry is configured.
+    const mod = "@sentry/nextjs";
+    Sentry = await import(/* webpackIgnore: true */ mod);
     Sentry.init({
       dsn,
       environment: process.env.NODE_ENV ?? "development",
