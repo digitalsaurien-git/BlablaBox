@@ -6,7 +6,7 @@ import { storedAudioExists } from '../audio-storage.ts';
 import { getTTSProvider } from '../providers/tts/index.ts';
 import { digest, json, claim, complete } from './learning-helpers.ts';
 import { ownedSession } from './learning-session.ts';
-import { MSG_NOT_FOUND_CONTENT, MSG_NOT_FOUND_ACTIVITY, MSG_NOT_FOUND_AUDIO, MSG_NOT_FOUND_QUESTION, MSG_FEEDBACK_BEFORE_ANSWER } from '../messages.ts';
+import { MSG_NOT_FOUND_CONTENT, MSG_NOT_FOUND_ACTIVITY, MSG_NOT_FOUND_AUDIO, MSG_NOT_FOUND_QUESTION, MSG_NOT_FOUND_SESSION, MSG_FEEDBACK_BEFORE_ANSWER } from '../messages.ts';
 
 export async function learningAudioText(db:PrismaClient,userId:string,versionId:string,key:string,sessionId?:string) {
   const version=await db.projectVersion.findFirst({where:{id:versionId,userId}});
