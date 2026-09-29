@@ -36,7 +36,8 @@ async function ensureInitialized(): Promise<boolean> {
       dsn,
       environment: process.env.NODE_ENV ?? "development",
       tracesSampleRate: process.env.NODE_ENV === "production" ? 0.1 : 1.0,
-      beforeSend(event) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      beforeSend(event: any) {
         // Ne jamais envoyer de données sensibles
         if (event.request?.headers) {
           delete event.request.headers["cookie"];
