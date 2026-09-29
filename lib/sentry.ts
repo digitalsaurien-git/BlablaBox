@@ -15,7 +15,8 @@ interface SentryEvent {
 }
 
 let sentryInitialized = false;
-let Sentry: typeof import("@sentry/nextjs") | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let Sentry: any = null;
 
 async function ensureInitialized(): Promise<boolean> {
   if (sentryInitialized) return Sentry !== null;
