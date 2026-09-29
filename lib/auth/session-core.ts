@@ -1,6 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
 
-export const SESSION_DURATION_SECONDS = 60 * 60 * 24 * 14;
+// Re-export cookie helpers so existing server-side imports keep working.
+export {
+  SESSION_DURATION_SECONDS,
+  getSessionCookieName,
+  getSessionCookieOptions,
+} from "./session-cookie";
 
 export function createSessionToken(): string {
   return randomBytes(32).toString("base64url");
@@ -8,20 +13,4 @@ export function createSessionToken(): string {
 
 export function hashSessionToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
-}
-
-export function getSessionCookieName(environment = process.env.NODE_ENV): string {
-  return environment === "production"
-    ? "__Host-blablabox_session"
-    : "blablabox_session";
-}
-
-export function getSessionCookieOptions(environment = process.env.NODE_ENV) {
-  return {
-    httpOnly: true,
-    secure: environment === "production",
-    sameSite: "lax" as const,
-    path: "/",
-    maxAge: SESSION_DURATION_SECONDS,
-  };
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getSessionCookieName } from "@/lib/auth/session-core";
+import { getSessionCookieName } from "@/lib/auth/session-cookie";
 import { logSecurity } from "@/lib/security-logger";
 
 /**
