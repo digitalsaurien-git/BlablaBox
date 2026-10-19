@@ -29,6 +29,9 @@ export async function AccountNavigation() {
       <Link href="/courses" className="rounded-md px-3 py-2 text-ink/75 transition hover:bg-mist hover:text-ink">
         Mes cours
       </Link>
+      <Link href="/homework" className="rounded-md px-3 py-2 text-ink/75 transition hover:bg-mist hover:text-ink">
+        Devoirs
+      </Link>
       <Link href="/usage" className="rounded-md px-3 py-2 text-ink/75 transition hover:bg-mist hover:text-ink">
         Utilisation
       </Link>

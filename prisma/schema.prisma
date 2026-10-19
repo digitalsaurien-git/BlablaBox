@@ -132,6 +132,7 @@ model User {
   learningSessions LearningSession[]
   learningAttempts LearningAttempt[]
   providerUsage ProviderUsage[]
+  homeworks     Homework[]
 }
 
 model Session {
@@ -223,6 +224,7 @@ model CourseTheme {
   projects Project[]
   learningVersions ProjectVersion[]
   learningSessions LearningSession[]
+  homeworks        Homework[]
 
   @@unique([id, userId])
   @@unique([userId, subjectId, title])
@@ -423,6 +425,33 @@ model LearningAttempt {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   session LearningSession @relation(fields: [sessionId, userId], references: [id, userId], onDelete: Cascade)
   @@index([userId, sessionId, questionIndex])
+}
+
+enum HomeworkStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+model Homework {
+  id               String         @id @default(cuid())
+  userId           String
+  dueDate          DateTime
+  subjectLabel     String         @db.VarChar(120)
+  description      String         @db.Text
+  courseThemeId    String?
+  courseUnresolved Boolean        @default(false)
+  status           HomeworkStatus @default(TODO)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  deletedAt        DateTime?
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  courseTheme CourseTheme? @relation(fields: [courseThemeId, userId], references: [id, userId], onDelete: NoAction, onUpdate: Cascade)
+
+  @@unique([id, userId])
+  @@index([userId, dueDate])
+  @@index([userId, status])
 }
 
 // Allowlisted technical metadata only: never prompts, outputs, files or error bodies.
