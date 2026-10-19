@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { compareNaturalReferences, parseNaturalSegments } from "./ordering.ts";
+import { parseCourseMetadata, type DriveImage } from "./course-metadata.ts";
 
 export class CourseMutationError extends Error {}
 
@@ -50,6 +51,26 @@ export async function reorderParts(database: PrismaClient, userId: string, theme
     } else parts.sort(compareNaturalReferences);
     for (const [position, part] of parts.entries()) await transaction.coursePart.updateMany({ where: { id: part.id, userId }, data: { position } });
   });
+}
+
+/** Ajoute une image Drive à la liste des schémas visuels du cours. */
+export async function addDriveImage(database: PrismaClient, userId: string, themeId: string, image: DriveImage) {
+  const theme = await database.courseTheme.findFirst({ where: { id: themeId, userId, deletedAt: null }, select: { metadata: true } });
+  if (!theme) throw new CourseMutationError("not-found");
+  const metadata = parseCourseMetadata(theme.metadata);
+  const existing = metadata.driveImages ?? [];
+  if (existing.some(img => img.fileId === image.fileId)) return; // déjà présente
+  const updated = [...existing, image];
+  await database.courseTheme.updateMany({ where: { id: themeId, userId }, data: { metadata: { driveImages: updated } } });
+}
+
+/** Supprime une image Drive de la liste des schémas visuels du cours. */
+export async function removeDriveImage(database: PrismaClient, userId: string, themeId: string, fileId: string) {
+  const theme = await database.courseTheme.findFirst({ where: { id: themeId, userId, deletedAt: null }, select: { metadata: true } });
+  if (!theme) throw new CourseMutationError("not-found");
+  const metadata = parseCourseMetadata(theme.metadata);
+  const updated = (metadata.driveImages ?? []).filter(img => img.fileId !== fileId);
+  await database.courseTheme.updateMany({ where: { id: themeId, userId }, data: { metadata: { driveImages: updated } } });
 }
 
 export async function placeSource(database: PrismaClient, userId: string, sourceAssetId: string, coursePartId: string) {

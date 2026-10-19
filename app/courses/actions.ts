@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentUser } from "@/lib/auth/session";
-import { CourseMutationError, createPart, updatePart, reorderParts, placeSource } from "@/lib/courses/mutations";
+import { CourseMutationError, createPart, updatePart, reorderParts, placeSource, addDriveImage, removeDriveImage } from "@/lib/courses/mutations";
 import { parseExpectedVersion, parseOptionalId, parseYear, readCourseText } from "@/lib/courses/validation";
 
 function readText(formData: FormData, name: string, maxLength = 180): string {
@@ -181,4 +181,26 @@ export async function confirmDuplicatePlacement(formData: FormData) {
   if (!sourceAssetId || !coursePartId) coursesError("not-found");
   await placeSource(prisma, user.id, sourceAssetId, coursePartId).catch(writeError);
   done();
+}
+
+export async function addCourseSchemaImage(formData: FormData) {
+  const user = await requireCurrentUser();
+  const courseThemeId = readId(formData, "courseThemeId");
+  const fileId = readText(formData, "fileId", 200);
+  const caption = readText(formData, "caption", 300) || undefined;
+  const mimeType = readText(formData, "mimeType", 100) || undefined;
+  if (!courseThemeId || !fileId) coursesError("invalid-fields");
+  await addDriveImage(prisma, user.id, courseThemeId, { fileId, caption, mimeType }).catch(writeError);
+  revalidatePath(`/courses/${courseThemeId}`);
+  redirect(`/courses/${courseThemeId}`);
+}
+
+export async function removeCourseSchemaImage(formData: FormData) {
+  const user = await requireCurrentUser();
+  const courseThemeId = readId(formData, "courseThemeId");
+  const fileId = readText(formData, "fileId", 200);
+  if (!courseThemeId || !fileId) coursesError("invalid-fields");
+  await removeDriveImage(prisma, user.id, courseThemeId, fileId).catch(writeError);
+  revalidatePath(`/courses/${courseThemeId}`);
+  redirect(`/courses/${courseThemeId}`);
 }

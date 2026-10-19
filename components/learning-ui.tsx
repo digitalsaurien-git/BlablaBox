@@ -1,5 +1,7 @@
 import { LearningSubmit } from '@/components/learning-submit';
+import Image from 'next/image';
 import Link from 'next/link';
+import type { DriveImage } from '@/lib/courses/course-metadata';
 import { ContinuousAudioPlayer } from './continuous-audio-player';
 import { createLearningAudio } from '@/app/courses/learning-actions';
 import { getStoredAudioPlayback, storedAudioExists } from '@/lib/audio-storage';
@@ -22,6 +24,11 @@ export function LearningBlocks({blocks,courseId}:{blocks:LearningOutput['blocks'
 export function CourseVisual({visual,courseId}:{visual:NonNullable<LearningOutput['visual']>;courseId:string}) {
   return <section className={learningPanel}><h2 className="text-xl font-bold">{visual.title}</h2><ol className={visual.type==='comparison'?'grid gap-4 sm:grid-cols-2':'grid gap-4 border-l-4 border-moss pl-4'}>{visual.items.map((item,i)=><li key={i} className="min-w-0 rounded-xl bg-paper p-4"><h3 className="font-bold">{['timeline','steps'].includes(visual.type)?`${i+1}. `:''}{item.label}</h3>{item.parent>=0?<p className="text-sm text-ink/70">En lien avec : {visual.items[item.parent].label}</p>:null}<p className="mt-2 leading-6">{item.detail}</p><SourceRefs courseId={courseId} refs={item.citations}/></li>)}</ol></section>;
 }
+export function CourseSchemaImages({images,courseId}:{images:DriveImage[];courseId:string}) {
+  if(!images.length)return null;
+  return <div className="grid gap-4">{images.map((img,i)=><figure key={img.fileId} className={`${learningPanel} gap-3`}><div className="relative w-full overflow-hidden rounded-xl bg-paper"><Image src={`/api/courses/${courseId}/drive-image/${encodeURIComponent(img.fileId)}`} alt={img.caption??`Schéma ${i+1} du cours`} width={900} height={600} className="w-full object-contain" style={{maxHeight:'60vh'}} priority={i===0} unoptimized/></div>{img.caption?<figcaption className="text-sm font-medium text-ink/70">{img.caption}</figcaption>:null}</figure>)}</div>;
+}
+
 export async function LearningAudio({courseId,versionId,audio,audioKey,sessionId}:{courseId:string;versionId:string;audio:unknown;audioKey:string;sessionId?:string}) {
   const record=parseAudio(audio)[audioKey];
   const playback=record&&await storedAudioExists(record.file)?await getStoredAudioPlayback(record.file):null;

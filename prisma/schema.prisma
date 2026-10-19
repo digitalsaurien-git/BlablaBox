@@ -211,6 +211,7 @@ model CourseTheme {
   subjectId String
   title     String   @db.VarChar(160)
   orderVersion Int   @default(0)
+  metadata  Json     @default("{}")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   deletedAt DateTime?
